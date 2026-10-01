@@ -1,0 +1,16 @@
+GESTIONALE FERRAMENTA - DEMO PER IPAD (dati inventati)
+
+Questa cartella e' la demo pronta da pubblicare su un indirizzo https
+(GitHub Pages, il proprio hosting, Netlify...). Va caricata cosi' com'e'.
+
+Installazione sull'iPad (una volta sola, con internet):
+ 1. apri l'indirizzo con Safari
+ 2. tocca Condividi -> "Aggiungi alla schermata Home"
+ 3. apri la demo dall'icona e lasciala caricare qualche secondo
+Da quel momento si apre a tutto schermo e funziona anche senza internet.
+
+Per aggiornarla: rilanciare prepara_sito.py e ricaricare la cartella.
+L'iPad prende la versione nuova la prima volta che apre l'app con la rete
+(e la mostra all'apertura successiva).
+
+Versione: 982530b5cc

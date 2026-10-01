@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gestionale Ferramenta Demo</title>
+<meta name="description" content="Demo del gestionale per ferramenta e agrarie: banco, articoli, fatture e SDI, scadenzario, analisi e registro agrofarmaci, con dati inventati.">
+<meta name="theme-color" content="#22303C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Gestionale">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icona-192.png">
+<link rel="stylesheet" href="styles.css">
+<style>html { background: #F4F6F8; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }</style>
+</head>
+<body>
+<div id="app" class="app"></div>
+<div id="finestre"></div>
+<div id="avvisi" class="avvisi" aria-live="polite"></div>
+<script src="dati.js" charset="utf-8"></script>
+<script src="icone.js" charset="utf-8"></script>
+<script src="app.js" charset="utf-8"></script>
+<script src="viste-1.js" charset="utf-8"></script>
+<script src="viste-2.js" charset="utf-8"></script>
+<script src="viste-3.js" charset="utf-8"></script>
+<script src="viste-4.js" charset="utf-8"></script>
+<script>
+  // copia tutti i file nell'iPad: dopo il primo avvio la demo funziona anche senza internet
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+</script>
+</body>
+</html>
