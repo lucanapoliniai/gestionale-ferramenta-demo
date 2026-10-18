@@ -17,6 +17,16 @@
   const clientiLookup = (lista) => (lista || G.S.clienti).slice().sort((a, b) => a.nome.localeCompare(b.nome)).map((c) => ({ id: c.id, testo: c.codice + ' — ' + c.nome + (c.piva ? ' · P.IVA ' + c.piva : c.cf ? ' · CF ' + c.cf : '') }));
   const tipoDoc = (f) => (f.tipo === 'NC' ? 'NOTA_CREDITO' : f.tipo === 'FAC' ? 'ACCOMPAGNATORIA' : 'FATTURA');
   const nomeFile = (f) => 'IT' + G.S.negozio.piva + '_' + f.progressivo + '.xml';
+  // ente pubblico (FatturaElettronica.PerPa): codice ufficio di 6 caratteri dell'Indice PA, oppure tipo «Pubblica amministrazione»
+  const perPa = (c) => !!c && (String(c.sdi || '').trim().length === 6 || c.tipoSogg === 'PA');
+  const problemaPa = (c) => (perPa(c) && String(c.sdi || '').trim().length !== 6
+    ? c.nome + ' è una Pubblica amministrazione, ma nella sua scheda manca il codice ufficio di 6 caratteri dell\'Indice PA: chiedilo all\'ente o cercalo su indicepa.gov.it e scrivilo nel campo Codice destinatario. Senza quel codice lo SDI scarta la fattura.'
+    : null);
+  // il formato è quello con cui il file è stato fatto (fatture_elettroniche.formato): quelle di prima erano tutte FPR12
+  const formatoDi = (f) => f.formato || 'FPR12';
+  const codicePa = (s) => String(s || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 15);
+  const soloAscii = (s, max) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim();
+  const NOTA_FIRMA = 'ente pubblico: prima dell\'invio va firmata con la chiavetta («Invia SDI» ti dice quale file)';
 
   // ---------- XML FatturaPA (come FatturaElettronica.GeneraXml) ----------
   function xmlFattura(f) {
@@ -39,10 +49,15 @@
     if (f.note) { const s = f.note.replace(/€/g, 'EUR').replace(/[\r\n]+/g, ' '); for (let i = 0; i < s.length; i += 200) causali.push(s.slice(i, i + 200)); }
     if (reg.dicitura) causali.push(reg.dicitura);
     const ddt = (f.ddtIds || []).map((id) => G.ddtDa(id)).filter(Boolean).map((d) => '      <DatiDDT>\n        <NumeroDDT>' + d.numero + '</NumeroDDT>\n        <DataDDT>' + d.data + '</DataDDT>\n      </DatiDDT>').join('\n');
-    return '<?xml version="1.0" encoding="UTF-8"?>\n<p:FatturaElettronica versione="FPR12" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">\n  <FatturaElettronicaHeader>\n    <DatiTrasmissione>\n      <IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>' + n.piva + '</IdCodice></IdTrasmittente>\n      <ProgressivoInvio>' + f.progressivo + '</ProgressivoInvio>\n      <FormatoTrasmissione>FPR12</FormatoTrasmissione>\n      <CodiceDestinatario>' + x(c.sdi || '0000000') + '</CodiceDestinatario>\n' + (c.pec && (!c.sdi || c.sdi === '0000000') ? '      <PECDestinatario>' + x(c.pec) + '</PECDestinatario>\n' : '') + '    </DatiTrasmissione>\n'
+    // FPA12 per gli enti pubblici: niente PEC del destinatario; CIG, CUP e ordine nel blocco DatiOrdineAcquisto
+    // (subito dopo i dati del documento, IdDocumento «ND» se il numero dell'ordine non c'è)
+    const formato = formatoDi(f), cd = String(c.sdi || '').trim().toUpperCase() || '0000000', pa = f.pa;
+    const ordine = pa && (pa.cig || pa.cup || pa.ordine || pa.data) ? '      <DatiOrdineAcquisto>\n        <IdDocumento>' + x(soloAscii(pa.ordine, 20) || 'ND') + '</IdDocumento>\n' + (pa.data ? '        <Data>' + pa.data + '</Data>\n' : '')
+      + (pa.cup ? '        <CodiceCUP>' + codicePa(pa.cup) + '</CodiceCUP>\n' : '') + (pa.cig ? '        <CodiceCIG>' + codicePa(pa.cig) + '</CodiceCIG>\n' : '') + '      </DatiOrdineAcquisto>\n' : '';
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<p:FatturaElettronica versione="' + formato + '" xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">\n  <FatturaElettronicaHeader>\n    <DatiTrasmissione>\n      <IdTrasmittente><IdPaese>IT</IdPaese><IdCodice>' + n.piva + '</IdCodice></IdTrasmittente>\n      <ProgressivoInvio>' + f.progressivo + '</ProgressivoInvio>\n      <FormatoTrasmissione>' + formato + '</FormatoTrasmissione>\n      <CodiceDestinatario>' + x(cd) + '</CodiceDestinatario>\n' + (formato === 'FPR12' && c.pec && cd === '0000000' ? '      <PECDestinatario>' + x(c.pec) + '</PECDestinatario>\n' : '') + '    </DatiTrasmissione>\n'
       + '    <CedentePrestatore>\n      <DatiAnagrafici>\n        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>' + n.piva + '</IdCodice></IdFiscaleIVA>\n        <Anagrafica><Denominazione>' + x(n.ragione) + '</Denominazione></Anagrafica>\n        <RegimeFiscale>RF01</RegimeFiscale>\n      </DatiAnagrafici>\n      <Sede><Indirizzo>' + x(n.indirizzo) + '</Indirizzo><CAP>' + n.cap + '</CAP><Comune>' + x(n.citta) + '</Comune><Provincia>' + n.prov + '</Provincia><Nazione>IT</Nazione></Sede>\n    </CedentePrestatore>\n'
       + '    <CessionarioCommittente>\n      <DatiAnagrafici>\n' + (c.piva ? '        <IdFiscaleIVA><IdPaese>IT</IdPaese><IdCodice>' + c.piva + '</IdCodice></IdFiscaleIVA>\n' : '') + (c.cf ? '        <CodiceFiscale>' + c.cf + '</CodiceFiscale>\n' : '') + '        <Anagrafica><Denominazione>' + x(c.nome) + '</Denominazione></Anagrafica>\n      </DatiAnagrafici>\n      <Sede><Indirizzo>' + x(c.indirizzo) + '</Indirizzo><CAP>' + x(c.cap) + '</CAP><Comune>' + x(c.citta) + '</Comune><Provincia>' + x(c.prov) + '</Provincia><Nazione>IT</Nazione></Sede>\n    </CessionarioCommittente>\n  </FatturaElettronicaHeader>\n'
-      + '  <FatturaElettronicaBody>\n    <DatiGenerali>\n      <DatiGeneraliDocumento>\n        <TipoDocumento>' + tdoc + '</TipoDocumento>\n        <Divisa>EUR</Divisa>\n        <Data>' + f.data + '</Data>\n        <Numero>' + (f.tipo === 'FT' ? '' : f.tipo + ' ') + f.numero + '/' + f.anno + '</Numero>\n        <ImportoTotaleDocumento>' + t.totale.toFixed(2) + '</ImportoTotaleDocumento>\n' + causali.map((cz) => '        <Causale>' + x(cz) + '</Causale>\n').join('') + '      </DatiGeneraliDocumento>\n' + (ddt ? ddt + '\n' : '') + '    </DatiGenerali>\n'
+      + '  <FatturaElettronicaBody>\n    <DatiGenerali>\n      <DatiGeneraliDocumento>\n        <TipoDocumento>' + tdoc + '</TipoDocumento>\n        <Divisa>EUR</Divisa>\n        <Data>' + f.data + '</Data>\n        <Numero>' + (f.tipo === 'FT' ? '' : f.tipo + ' ') + f.numero + '/' + f.anno + '</Numero>\n        <ImportoTotaleDocumento>' + t.totale.toFixed(2) + '</ImportoTotaleDocumento>\n' + causali.map((cz) => '        <Causale>' + x(cz) + '</Causale>\n').join('') + '      </DatiGeneraliDocumento>\n' + ordine + (ddt ? ddt + '\n' : '') + '    </DatiGenerali>\n'
       + '    <DatiBeniServizi>\n' + righe + '\n' + riep + '\n    </DatiBeniServizi>\n'
       + (f.tipo === 'NC' ? '' : '    <DatiPagamento>\n      <CondizioniPagamento>TP02</CondizioniPagamento>\n      <DettaglioPagamento>\n        <ModalitaPagamento>' + fe + '</ModalitaPagamento>\n' + (scad ? '        <DataScadenzaPagamento>' + scad.scadenza + '</DataScadenzaPagamento>\n' : '') + '        <ImportoPagamento>' + (reg.split ? t.imponibile : t.totale).toFixed(2) + '</ImportoPagamento>\n' + (['MP05', 'MP12', 'MP09'].includes(fe) ? '        <IBAN>' + n.iban.replace(/\s/g, '') + '</IBAN>\n' : '') + '      </DettaglioPagamento>\n    </DatiPagamento>\n')
       + '  </FatturaElettronicaBody>\n</p:FatturaElettronica>\n';
@@ -51,6 +66,46 @@
     const testo = esc(xmlFattura(f)).replace(/(&lt;\/?)([\w:.]+)/g, '$1<span class="tag">$2</span>');
     G.finestra({ titolo: nomeFile(f) + ' — Blocco note', larghezza: 820, altezza: 680, bianca: true, corpo: '<pre class="xml">' + testo + '</pre>' });
   }
+
+  // ---------- Fattura a un ente pubblico (EntePubblicoWindow.Chiedi) ----------
+  // prima di emettere: per un ente pubblico CIG, CUP e ordine; fatto(dati) — dati null se il cliente non è un
+  // ente pubblico; se si annulla, o se manca il codice ufficio, fatto non viene chiamato
+  function chiediEntePubblico(clienteId, documento, reg, fatto) {
+    const c = G.cli(clienteId);
+    if (!perPa(c)) { fatto(null); return; }
+    const problema = problemaPa(c);
+    if (problema) { G.msgbox({ titolo: 'Manca il codice ufficio dell\'ente', icona: 'avviso', testo: problema }); return; }
+    const split = !!(reg && reg.split);
+    const st = { cig: '', cup: '', ordine: '', data: '', msg: ' ' };
+    const tieni = () => { st.cig = val('pa-cig'); st.cup = val('pa-cup'); st.ordine = val('pa-ord'); st.data = G.valoreDp('pa-data'); };
+    const o = G.finestra({ titolo: 'Fattura a un ente pubblico', larghezza: 560,
+      corpo: () => '<div class="card" style="margin:20px;padding:18px 24px"><div class="h2" style="font-size:17px">Fattura a un ente pubblico</div>'
+        + '<div class="muto" style="margin:4px 0 14px">' + esc(c.nome + ' è un ente pubblico (codice ufficio ' + String(c.sdi).trim().toUpperCase() + '): la ' + documento + ' esce in formato PA (FatturaPA). CIG e CUP vanno nei campi dell\'XML che legge la contabilità dell\'ente: senza CIG, di norma, l\'ente non può pagare.') + '</div>'
+        + '<div class="avvolgi">' + campo('CIG', tb('pa-cig', st.cig, ' maxlength="15" data-invio="pa-ok" style="text-transform:uppercase;font-family:var(--mono)" title="Codice identificativo di gara, 10 caratteri: lo comunica l\'ente con l\'ordine o la determina"'), 170)
+        + campo('CUP (se c\'è)', tb('pa-cup', st.cup, ' maxlength="15" data-invio="pa-ok" style="text-transform:uppercase;font-family:var(--mono)" title="Codice unico di progetto, 15 caratteri: c\'è solo per lavori pubblici e progetti finanziati"'), 200) + '</div>'
+        + '<div class="avvolgi">' + campo('Ordine o determina n.', tb('pa-ord', st.ordine, ' maxlength="20" data-invio="pa-ok" title="Facoltativo: il numero del buono d\'ordine o della determina dell\'ente"'), 170)
+        + campo('del', G.dp('pa-data', st.data, { larghezza: 150 }), 150) + '</div>'
+        + (split ? '' : '<div style="color:var(--rosso);font-size:12.5px;margin:2px 0 6px">' + esc('⚠ Regime IVA: ' + (reg ? reg.descr : 'IVA ordinaria') + '. I Comuni e quasi tutti gli enti pubblici pagano in split payment: se è uno sbaglio, premi Annulla e scegli «Split payment».') + '</div>')
+        + '<div style="font-size:12.5px;margin:2px 0 0">Prima dell\'invio allo SDI la fattura va firmata con la chiavetta: quando premi «Invia SDI» il programma ti dice quale file firmare.</div>'
+        + '<div style="color:var(--rosso);font-size:12.5px;margin:8px 0 10px;min-height:17px">' + esc(st.msg) + '</div>'
+        + '<div class="riga" style="justify-content:flex-end">' + btn('Emetti la fattura', 'pa-ok', { primario: true, stile: 'padding:9px 26px' }) + btn('Annulla', 'pa-annulla', { stile: 'padding:9px 22px;margin-left:10px' }) + '</div></div>',
+      monta: () => { const el = document.getElementById('pa-cig'); if (el && !st.aperta) { st.aperta = true; el.focus({ preventScroll: true }); } } });
+    A['pa-annulla'] = () => G.chiudiFinestra(o);
+    A['pa-ok'] = () => {
+      const cig = codicePa(val('pa-cig')), cup = codicePa(val('pa-cup'));
+      if (cig && cig.length !== 10) { tieni(); st.msg = 'Il CIG è di 10 caratteri, lettere e cifre (qui ce ne sono ' + cig.length + '): controllalo.'; G.aggiornaFinestra(o); return; }
+      if (cup && cup.length !== 15) { tieni(); st.msg = 'Il CUP è di 15 caratteri, lettere e cifre (qui ce ne sono ' + cup.length + '): controllalo.'; G.aggiornaFinestra(o); return; }
+      const emetti = () => { const dati = { cig, cup, ordine: soloAscii(val('pa-ord'), 20), data: G.valoreDp('pa-data') || '' }; G.chiudiFinestra(o); fatto(dati); };
+      if (!cig) {
+        G.msgbox({ titolo: 'Fattura senza CIG', icona: 'avviso', predefinito: 1, testo: 'Senza CIG l\'ente di norma non può pagare la fattura (art. 25 DL 66/2014): ne sono esenti solo pochi casi.\n\nEmetto la fattura senza CIG?', pulsanti: [{ t: 'Sì', az: emetti }, { t: 'No', annulla: true }] });
+        return;
+      }
+      emetti();
+    };
+  }
+  G.chiediEntePubblico = chiediEntePubblico;
+  G.perPa = perPa;
+  G.NOTA_FIRMA = NOTA_FIRMA;
 
   // =====================================================================
   // FATTURE
@@ -102,7 +157,7 @@
           + '<div class="avvolgi">' + campo('Cliente *', G.cmb('acc-cli', { voci: clientiLookup(), valore: p.clienteId, title: 'Scrivi una parte qualsiasi del nome (anche in mezzo): la lista si restringe da sola', onScegli: (v) => { p.clienteId = v; const c = v ? G.cli(v) : null; p.listino = c ? c.listino : 'A'; if (p.artSel) p.prezzo = prezzo2(prezzoListino(G.art(p.artSel), p.listino)); G.ridisegna(); } }), 300)
           + '<div style="width:220px;margin:0 14px 10px 0"><div class="muto">Pagamento</div><div style="margin-top:3px">' + G.sel('data-ch="acc-pag"', S.metodi.slice().sort(ordMetodi).map((m) => [m.id, m.nome]), p.metodoId) + '</div><div class="muto" style="margin-top:4px">' + esc(testoScadenza(p.metodoId, '')) + '</div></div>'
           + campo('Regime IVA', G.sel('data-ch="acc-reg"', S.causaliIva.map((c) => [c.id, c.codice + ' — ' + c.descr]), p.regimeId), 220)
-          + campo('Note (in fattura e nella Causale XML)', '<textarea class="tb" id="acc-note" data-in="ftp-campo" data-k="note" maxlength="1000" style="height:40px;max-height:58px" title="Testo libero (es. CIG, riferimento dell\'ordine, IBAN): si stampa sulla fattura sotto gli articoli e va nel campo «Causale» dell\'XML per lo SDI">' + esc(p.note || '') + '</textarea>', 280) + '</div>'
+          + campo('Note (in fattura e nella Causale XML)', '<textarea class="tb" id="acc-note" data-in="ftp-campo" data-k="note" maxlength="1000" style="height:40px;max-height:58px" title="Testo libero (es. riferimenti, IBAN): si stampa sulla fattura sotto gli articoli e va nel campo «Causale» dell\'XML per lo SDI. Per un ente pubblico CIG e CUP li chiede il programma quando emetti">' + esc(p.note || '') + '</textarea>', 280) + '</div>'
           + '<div style="background:#F4F6F8;border-radius:8px;padding:10px;margin-bottom:8px"><div class="muto" style="margin-bottom:4px">Aggiungi articolo (il prezzo segue il listino A/B/C del cliente)</div>'
           + tb('acc-cerca', p.q || '', ' data-in="acc-cerca"') + '<div class="lb" id="acc-ris" style="height:120px;margin:6px 0">' + risAcc(p) + '</div>'
           + '<div class="avvolgi basso"><div style="width:300px;margin-right:12px"><div class="muto">Articolo</div><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (art ? esc(G.documenti.displayArt(art)) : '—') + '</div></div>'
@@ -158,9 +213,13 @@
     if (!motivo) { p.msg = { colore: 'var(--rosso)', testo: 'Indica il motivo dello storno.' }; G.ridisegna(); return; }
     const rientra = document.getElementById('nc-mag').checked;
     G.msgbox({ titolo: 'Conferma nota di credito', icona: 'avviso', testo: 'Sei sicuro di voler stornare la fattura ' + G.numeroFattura(f) + ' con una nota di credito?', pulsanti: [{ t: 'Sì', az: () => {
+      const cli = G.cli(f.clienteId), problema = problemaPa(cli);
+      if (problema) { p.msg = { colore: 'var(--rosso)', testo: problema }; G.ridisegna(); return; }
       const righe = f.righe.map((r) => Object.assign({}, r));
       const anno = Number(G.OGGI.slice(0, 4));
-      const nc = { id: G.nuovoId(), tipo: 'NC', numero: ++S.numeri.nc, anno, data: G.OGGI, clienteId: f.clienteId, righe, imponibile: f.imponibile, iva: f.iva, totale: f.totale, metodoId: f.metodoId, pagTesto: f.pagTesto, ddtIds: [], sdi: 'GENERATO', mail: '', progressivo: String(++S.numeri.progressivo).padStart(5, '0'), causaleIvaId: f.causaleIvaId, note: motivo, origineId: f.id, rientro: rientra, ridotto: 0 };
+      const nc = { id: G.nuovoId(), tipo: 'NC', numero: ++S.numeri.nc, anno, data: G.OGGI, clienteId: f.clienteId, righe, imponibile: f.imponibile, iva: f.iva, totale: f.totale, metodoId: f.metodoId, pagTesto: f.pagTesto, ddtIds: [], sdi: 'GENERATO', mail: '', progressivo: String(++S.numeri.progressivo).padStart(5, '0'), causaleIvaId: f.causaleIvaId, note: motivo, origineId: f.id, rientro: rientra, ridotto: 0, formato: perPa(cli) ? 'FPA12' : 'FPR12' };
+      // ente pubblico: la nota di credito riporta lo stesso CIG/CUP della fattura che storna
+      if (f.pa) nc.pa = Object.assign({}, f.pa);
       S.fatture.push(nc);
       if (rientra) righe.forEach((r) => { const a = G.art(r.artId); if (a) a.giac = r2(a.giac + r.qta); });
       const s = S.scadenze.find((x) => x.fatturaId === f.id);
@@ -192,15 +251,20 @@
     const c = p.clienteId ? G.cli(p.clienteId) : null;
     if (!c || (!c.piva && !c.cf)) { p.msg = { colore: 'var(--rosso)', testo: 'Seleziona il cliente (con P.IVA o codice fiscale).' }; G.ridisegna(); return; }
     const reg = S.causaliIva.find((x) => x.id === p.regimeId) || S.causaliIva[0];
-    const righe = p.righe.map((r) => Object.assign({}, r, { iva: reg.natura ? 0 : r.iva }));
-    const t = G.totaliRighe(righe), anno = Number(G.OGGI.slice(0, 4));
-    const f = { id: G.nuovoId(), tipo: 'FAC', numero: ++S.numeri.fac, anno, data: G.OGGI, clienteId: c.id, righe, imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId: p.metodoId, pagTesto: '', ddtIds: [], sdi: 'GENERATO', mail: '', progressivo: String(++S.numeri.progressivo).padStart(5, '0'), causaleIvaId: reg.id, note: (val('acc-note') || p.note || '').trim() };
-    S.fatture.push(f);
-    S.scadenze.push({ id: G.nuovoId(), tipo: 'ATTIVA', soggettoId: c.id, fatturaId: f.id, documento: String(f.numero), dataDoc: f.data, scadenza: G.scadenzaFattura(f.metodoId, '', f.data), importo: reg.split ? t.imponibile : t.totale, pagato: 0, stato: 'APERTA', metodo: G.metodo(f.metodoId).nome, conto: '', note: '', incassi: [] });
-    righe.forEach((r) => { const a = G.art(r.artId); if (a) a.giac = r2(a.giac - r.qta); });
-    G.indicizza(); G.log('Fattura', 'Emessa fattura accompagnatoria n. FAC ' + f.numero + ' a ' + c.nome + ' · € ' + G.z2(f.totale), 'doc:' + f.id); G.salva();
-    u.pannello = null; u.msg = { colore: 'var(--verde)', testo: 'Fattura accompagnatoria FAC ' + f.numero + ' emessa · magazzino scaricato · XML generato.' }; G.deseleziona('ft');
-    G.ridisegna(); G.apriDocumento(G.docDaFattura(f));
+    const note = (val('acc-note') || p.note || '').trim();
+    // ente pubblico: prima CIG, CUP e ordine (e il promemoria della firma)
+    chiediEntePubblico(c.id, 'fattura accompagnatoria', reg, (pa) => {
+      const righe = p.righe.map((r) => Object.assign({}, r, { iva: reg.natura ? 0 : r.iva }));
+      const t = G.totaliRighe(righe), anno = Number(G.OGGI.slice(0, 4));
+      const f = { id: G.nuovoId(), tipo: 'FAC', numero: ++S.numeri.fac, anno, data: G.OGGI, clienteId: c.id, righe, imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId: p.metodoId, pagTesto: '', ddtIds: [], sdi: 'GENERATO', mail: '', progressivo: String(++S.numeri.progressivo).padStart(5, '0'), causaleIvaId: reg.id, note, formato: perPa(c) ? 'FPA12' : 'FPR12' };
+      if (pa) f.pa = pa;
+      S.fatture.push(f);
+      S.scadenze.push({ id: G.nuovoId(), tipo: 'ATTIVA', soggettoId: c.id, fatturaId: f.id, documento: String(f.numero), dataDoc: f.data, scadenza: G.scadenzaFattura(f.metodoId, '', f.data), importo: reg.split ? t.imponibile : t.totale, pagato: 0, stato: 'APERTA', metodo: G.metodo(f.metodoId).nome, conto: '', note: '', incassi: [] });
+      righe.forEach((r) => { const a = G.art(r.artId); if (a) a.giac = r2(a.giac - r.qta); });
+      G.indicizza(); G.log('Fattura', 'Emessa fattura accompagnatoria n. FAC ' + f.numero + ' a ' + c.nome + ' · € ' + G.z2(f.totale), 'doc:' + f.id); G.salva();
+      u.pannello = null; u.msg = { colore: 'var(--verde)', testo: 'Fattura accompagnatoria FAC ' + f.numero + ' emessa · magazzino scaricato · XML generato' + (pa ? ' · ' + NOTA_FIRMA : '') + '.' }; G.deseleziona('ft');
+      G.ridisegna(); G.apriDocumento(G.docDaFattura(f));
+    });
   };
   // ---- differita da DDT ----
   A['ft-diff'] = () => {
@@ -221,15 +285,19 @@
     const reg = S.causaliIva.find((x) => x.id === p.regimeId) || S.causaliIva[0];
     const pagTesto = (G.testoCombo('diff-pag') || p.pagTesto || '').trim();
     const metodoId = G.valoreCombo('diff-pag') || null;
-    const righe = [].concat(...ddt.map((d) => d.righe.map((r) => Object.assign({}, r, { iva: reg.natura ? 0 : r.iva }))));
-    const t = G.totaliRighe(righe), anno = Number(G.OGGI.slice(0, 4));
-    const f = { id: G.nuovoId(), tipo: 'FT', numero: ++S.numeri.ft, anno, data: G.OGGI, clienteId: p.clienteId, righe, imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId, pagTesto: metodoId ? '' : pagTesto, ddtIds: ddt.map((d) => d.id), sdi: 'GENERATO', mail: '', progressivo: String(++S.numeri.progressivo).padStart(5, '0'), causaleIvaId: reg.id, note: '' };
-    S.fatture.push(f); ddt.forEach((d) => { d.fatturaId = f.id; });
-    const met = metodoId ? G.metodo(metodoId) : null;
-    S.scadenze.push({ id: G.nuovoId(), tipo: 'ATTIVA', soggettoId: p.clienteId, fatturaId: f.id, documento: String(f.numero), dataDoc: f.data, scadenza: G.scadenzaFattura(metodoId, pagTesto, f.data), importo: reg.split ? t.imponibile : t.totale, pagato: 0, stato: 'APERTA', metodo: met ? met.nome : pagTesto, conto: '', note: '', incassi: [] });
-    G.indicizza(); G.log('Fattura', 'Emessa fattura differita n. ' + f.numero + ' (' + ddt.length + ' DDT) a ' + G.cli(p.clienteId).nome + ' · € ' + G.z2(f.totale), 'doc:' + f.id); G.salva();
-    u.pannello = null; u.msg = { colore: 'var(--verde)', testo: 'Fattura differita n. ' + f.numero + ' emessa (' + ddt.length + ' DDT riepilogati, XML TD24 con riferimenti).' }; G.deseleziona('ft');
-    G.ridisegna(); G.apriDocumento(G.docDaFattura(f));
+    chiediEntePubblico(p.clienteId, 'fattura', reg, (pa) => {
+      const c = G.cli(p.clienteId);
+      const righe = [].concat(...ddt.map((d) => d.righe.map((r) => Object.assign({}, r, { iva: reg.natura ? 0 : r.iva }))));
+      const t = G.totaliRighe(righe), anno = Number(G.OGGI.slice(0, 4));
+      const f = { id: G.nuovoId(), tipo: 'FT', numero: ++S.numeri.ft, anno, data: G.OGGI, clienteId: p.clienteId, righe, imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId, pagTesto: metodoId ? '' : pagTesto, ddtIds: ddt.map((d) => d.id), sdi: 'GENERATO', mail: '', progressivo: String(++S.numeri.progressivo).padStart(5, '0'), causaleIvaId: reg.id, note: '', formato: perPa(c) ? 'FPA12' : 'FPR12' };
+      if (pa) f.pa = pa;
+      S.fatture.push(f); ddt.forEach((d) => { d.fatturaId = f.id; });
+      const met = metodoId ? G.metodo(metodoId) : null;
+      S.scadenze.push({ id: G.nuovoId(), tipo: 'ATTIVA', soggettoId: p.clienteId, fatturaId: f.id, documento: String(f.numero), dataDoc: f.data, scadenza: G.scadenzaFattura(metodoId, pagTesto, f.data), importo: reg.split ? t.imponibile : t.totale, pagato: 0, stato: 'APERTA', metodo: met ? met.nome : pagTesto, conto: '', note: '', incassi: [] });
+      G.indicizza(); G.log('Fattura', 'Emessa fattura differita n. ' + f.numero + ' (' + ddt.length + ' DDT) a ' + c.nome + ' · € ' + G.z2(f.totale), 'doc:' + f.id); G.salva();
+      u.pannello = null; u.msg = { colore: 'var(--verde)', testo: 'Fattura differita n. ' + f.numero + ' emessa (' + ddt.length + ' DDT riepilogati, XML TD24 con riferimenti)' + (pa ? ' · ' + NOTA_FIRMA : '') + '.' }; G.deseleziona('ft');
+      G.ridisegna(); G.apriDocumento(G.docDaFattura(f));
+    });
   };
   // ---- PDF, XML, email, SDI, annullamento ----
   A['ft-pdf'] = () => { const u = ft(), f = G.selezionato('ft'); if (!f) return; const d = G.docDaFattura(f); G.apriDocumento(d); u.msg = { colore: 'var(--testo-2)', testo: 'PDF aperto: ' + d.file + '.pdf' }; G.ridisegna(); };
@@ -264,13 +332,29 @@
   A['ft-sdi'] = () => {
     const u = ft(), f = G.selezionato('ft'); if (!f) return;
     const che = f.tipo === 'NC' ? 'nota di credito n. ' + f.numero + '/' + f.anno : f.tipo === 'FAC' ? 'fattura accompagnatoria FAC ' + f.numero + '/' + f.anno : 'fattura n. ' + f.numero + '/' + f.anno;
-    G.msgbox({ titolo: 'Conferma invio allo SDI', icona: 'avviso', predefinito: 1, testo: 'Stai per inviare DAVVERO allo SDI (Agenzia delle Entrate) la ' + che + ' — ' + (G.cli(f.clienteId) || {}).nome + '.\n\nFile: ' + nomeFile(f) + '\nDestinatario PEC: ' + sdiCfg().sportello + '\n\nConfermi l\'invio?', pulsanti: [{ t: 'Sì', az: () => {
+    // ente pubblico: senza il file firmato con la chiavetta non si parte; prima di chiedere la conferma si dice
+    // quale file firmare. Nella demo la firma è simulata: al «Invia SDI» successivo il file risulta firmato
+    let file = nomeFile(f), allegato = nomeFile(f);
+    if (formatoDi(f) === 'FPA12' && f.sdi === 'GENERATO') {
+      if (!f.firmato && !f.daFirmare) {
+        f.daFirmare = true; G.salva();
+        const istruzioni = 'La ' + che + ' è per un ente pubblico: lo SDI la accetta solo firmata digitalmente.\n\n'
+          + '1. Con la chiavetta firma il file ' + nomeFile(f) + ' (si apre la cartella Fe, col file già selezionato): il programma di firma crea ' + nomeFile(f) + '.p7m nella stessa cartella.\n'
+          + '2. Poi premi di nuovo «Invia SDI»: il programma controlla la firma e manda il file firmato.';
+        u.msg = { colore: 'var(--rosso)', testo: istruzioni.split('\n')[0] + ' Firmala con la chiavetta, poi premi di nuovo «Invia SDI».' }; G.ridisegna();
+        G.msgbox({ titolo: 'Fattura da firmare con la chiavetta', icona: 'info', testo: istruzioni });
+        return;
+      }
+      if (!f.firmato) { f.firmato = true; delete f.daFirmare; G.log('SDI', 'Trovato e controllato il file firmato con la chiavetta (fattura a un ente pubblico)', 'doc:' + f.id); G.salva(); }
+      file += '.p7m (firmato con la chiavetta)'; allegato += '.p7m';
+    }
+    G.msgbox({ titolo: 'Conferma invio allo SDI', icona: 'avviso', predefinito: 1, testo: 'Stai per inviare DAVVERO allo SDI (Agenzia delle Entrate) la ' + che + ' — ' + (G.cli(f.clienteId) || {}).nome + '.\n\nFile: ' + file + '\nDestinatario PEC: ' + sdiCfg().sportello + '\n\nConfermi l\'invio?', pulsanti: [{ t: 'Sì', az: () => {
       if (f.sdi === 'SCARTATO') { u.msg = { colore: 'var(--rosso)', testo: 'La ' + che + ' e\' stata SCARTATA dallo SDI: va corretta e RIEMESSA. Non si puo\' rispedire lo stesso file, perche\' il suo numero di invio risulta gia\' usato.' }; G.ridisegna(); return; }
       if (f.sdi !== 'GENERATO') { u.msg = { colore: 'var(--rosso)', testo: 'La ' + che + ' risulta gia\' trasmessa allo SDI' + (f.inviatoIl ? ' il ' + dataIt(f.inviatoIl) + ' alle ' + (f.inviatoOra || '09:' + G.D.pad(f.id % 60)) : '') + ' (stato ' + f.sdi + '). Non va inviata due volte.' }; G.ridisegna(); return; }
       if (!sdiCfg().indirizzo) { u.msg = { colore: 'var(--rosso)', testo: 'Prima va configurata la casella PEC (pulsante «PEC / SDI…»).' }; G.ridisegna(); return; }
       // nella demo non parte nessuna PEC: lo stato diventa «INVIATO» come nel programma
-      f.sdi = 'INVIATO'; f.inviatoIl = G.OGGI; f.inviatoOra = G.adessoIso().slice(11, 16); G.log('SDI', 'Inviata allo SDI via PEC la ' + che + ' (' + nomeFile(f) + ')', 'doc:' + f.id); G.salva();
-      u.msg = { colore: 'var(--verde)', testo: nomeFile(f) + ' inviato a ' + sdiCfg().sportello + '. La ricevuta arrivera\' sulla PEC: usa «PEC / SDI…» → «Controlla e lavora ricevute».' }; G.ridisegna();
+      f.sdi = 'INVIATO'; f.inviatoIl = G.OGGI; f.inviatoOra = G.adessoIso().slice(11, 16); G.log('SDI', 'Inviata allo SDI via PEC la ' + che + ' (' + allegato + ')', 'doc:' + f.id); G.salva();
+      u.msg = { colore: 'var(--verde)', testo: allegato + ' inviato a ' + sdiCfg().sportello + '. La ricevuta arrivera\' sulla PEC: usa «PEC / SDI…» → «Controlla e lavora ricevute».' }; G.ridisegna();
     } }, { t: 'No', annulla: true }] });
   };
   // annullamento come AnnullaDocumento.Esegui + Db.VerificaAnnulloDocumento: verifica, elenco degli effetti,
@@ -356,7 +440,7 @@
         + btn('Prepara ZIP', 'sdi-zip', { stile: 'padding:7px 16px;margin:0 8px 10px 0' })
         + btn('Invia via PEC allo SDI', 'sdi-invia', { primario: true, dis: !st.zip, stile: 'padding:7px 16px;margin:0 8px 10px 0' })
         + btn('Apri cartella ZIP', 'sdi-cartella', { dis: !st.zip, stile: 'padding:7px 12px;margin:0 0 10px 0', title: 'Se preferisci, puoi allegare lo ZIP alla PEC a mano come hai sempre fatto' }) + '</div>'
-        + '<div class="muto" style="min-height:16px">' + esc(st.invioMsg) + '</div></div>'
+        + '<div class="muto" style="min-height:16px;white-space:pre-line">' + esc(st.invioMsg) + '</div></div>'
         + '<div class="card" style="margin-bottom:12px">' + titoloSez('3 · Ricezione: ricevute SDI e fatture dei fornitori', 6) + '<div class="muto" style="margin-bottom:10px">Controlla la casella PEC: le ricevute aggiornano lo stato delle fatture (consegnata / scartata con motivo), le fatture di acquisto vengono scaricate e registrate con scadenze e allegati.</div>'
         + '<div class="riga">' + btn('Controlla casella adesso', 'sdi-controlla', { primario: true, stile: 'padding:7px 16px' }) + msgSpan(st.ricMsg, 'margin-left:14px') + '</div></div>'
         + registro(st.log, 150) + '</div>' });
@@ -380,12 +464,27 @@
       st.cfgMsg = { colore: 'var(--verde)', testo: t }; scrivi(t); aggiornaTenendo(o);
     };
     A['sdi-zip'] = () => {
-      const f = daMandare(), mm = G.D.pad(st.mese);
-      if (!f.length) { st.zip = null; st.invioMsg = 'Nessuna fattura da inviare per ' + mm + '/' + st.anno + ' (tutte già trasmesse o nessuna emessa).'; scrivi(st.invioMsg); aggiornaTenendo(o); return; }
+      const tutte = daMandare(), mm = G.D.pad(st.mese);
+      if (!tutte.length) { st.zip = null; st.invioMsg = 'Nessuna fattura da inviare per ' + mm + '/' + st.anno + ' (tutte già trasmesse o nessuna emessa).'; scrivi(st.invioMsg); aggiornaTenendo(o); return; }
+      // fatture agli enti pubblici: nello ZIP solo col file firmato (.xml.p7m); quelle non firmate restano fuori.
+      // Nella demo la firma è simulata: al «Prepara ZIP» successivo risultano firmate
+      const daFirmare = [];
+      tutte.filter((x) => formatoDi(x) === 'FPA12' && !x.firmato).forEach((x) => {
+        if (x.daFirmare) { x.firmato = true; delete x.daFirmare; G.log('SDI', 'Trovato e controllato il file firmato con la chiavetta (fattura a un ente pubblico)', 'doc:' + x.id); }
+        else { x.daFirmare = true; daFirmare.push(x); }
+      });
+      const f = tutte.filter((x) => formatoDi(x) !== 'FPA12' || x.firmato);
+      if (!f.length) {
+        st.zip = null;
+        st.invioMsg = 'Le fatture da inviare per ' + mm + '/' + st.anno + ' sono tutte per enti pubblici e vanno prima firmate con la chiavetta:\n' + daFirmare.map((x) => '• ' + nomeFile(x)).join('\n') + '\n\nFirmale (il programma di firma crea i .p7m nella stessa cartella Fe), poi prepara di nuovo lo ZIP.';
+        scrivi('Da firmare con la chiavetta prima dello ZIP'); G.salva(); aggiornaTenendo(o); return;
+      }
       st.zip = { nome: 'IT' + S.negozio.piva + '_Z' + mm + String(st.anno % 100).padStart(2, '0') + '.zip', ids: f.map((x) => x.id), anno: st.anno, mese: st.mese };
-      st.invioMsg = 'ZIP pronto: ' + st.zip.nome + ' — ' + f.length + ' fatture del ' + mm + '/' + st.anno + '. Puoi inviarlo col pulsante qui sopra, oppure allegarlo a mano alla PEC come sempre.';
+      st.invioMsg = 'ZIP pronto: ' + st.zip.nome + ' — ' + f.length + ' fatture del ' + mm + '/' + st.anno + '. Puoi inviarlo col pulsante qui sopra, oppure allegarlo a mano alla PEC come sempre.'
+        + (daFirmare.length ? '\n⚠ Restano fuori ' + daFirmare.length + ' fatture per enti pubblici, da firmare prima con la chiavetta: ' + daFirmare.map(nomeFile).join(', ') + '. Firmale (i .p7m vanno nella stessa cartella Fe) e prepara di nuovo lo ZIP.' : '');
       scrivi('ZIP preparato: ' + st.zip.nome + ' (' + f.length + ' fatture)');
-      G.log('SDI', 'Preparato ZIP mese ' + mm + '/' + st.anno + ' con ' + f.length + ' fatture (' + st.zip.nome + ')'); G.salva();
+      if (daFirmare.length) scrivi('Da firmare con la chiavetta: ' + daFirmare.length + ' fatture per enti pubblici');
+      G.log('SDI', 'Preparato ZIP mese ' + mm + '/' + st.anno + ' con ' + f.length + ' fatture (' + st.zip.nome + ')' + (daFirmare.length ? ' · ' + daFirmare.length + ' per enti pubblici restano fuori: da firmare' : '')); G.salva();
       aggiornaTenendo(o);
     };
     // «Apri cartella ZIP»: sull'iPad il file preparato si salva in «File»
@@ -426,8 +525,8 @@
     let ricevute = 0;
     const segna = (f, stato, messaggi) => { f.sdi = stato; ricevute++; const t = 'Fattura n. ' + f.numero + '/' + f.anno + ': ' + stato + (messaggi ? ' — ' + messaggi : ''); dettagli.push('✓ ' + t); G.log('SDI', t); };
     S.fatture.filter((f) => f.sdi === 'INVIATO').forEach((f) => segna(f, 'CONSEGNATO'));
-    // la decorrenza dei termini arriva solo per le fatture alla Pubblica Amministrazione, dopo 15 giorni senza esito
-    S.fatture.filter((f) => f.sdi === 'CONSEGNATO' && (G.cli(f.clienteId) || {}).tipoSogg === 'PA' && f.inviatoIl && f.inviatoIl < G.D.piuGiorni(G.OGGI, -15)).forEach((f) => segna(f, 'ACCETTATO', 'Decorrenza termini (accettata per silenzio-assenso).'));
+    // la decorrenza dei termini arriva solo per le fatture alla Pubblica Amministrazione (formato PA), dopo 15 giorni senza esito
+    S.fatture.filter((f) => f.sdi === 'CONSEGNATO' && formatoDi(f) === 'FPA12' && f.inviatoIl && f.inviatoIl < G.D.piuGiorni(G.OGGI, -15)).forEach((f) => segna(f, 'ACCETTATO', 'Decorrenza termini (accettata per silenzio-assenso).'));
     const letti = ricevute + (rileggi || 0);
     G.log('SDI', 'Controllo PEC: ' + letti + ' messaggi, ' + ricevute + ' ricevute, 0 acquisti importati'); G.salva();
     return { letti, ricevute, testo: 'Letti ' + letti + ' messaggi · ' + ricevute + ' ricevute lavorate', dettagli };
@@ -675,8 +774,8 @@
     '00417': ['Del cliente non c\'è né partita IVA né codice fiscale.', 'Dati del cliente: per un privato serve almeno il codice fiscale.'],
     '00311': ['Il codice destinatario non è valido.', 'Dati del cliente, campo Codice destinatario.'],
     '00312': ['Il codice destinatario esiste ma non è attivo (dismesso o non ancora attivato).', 'Chiedi al cliente il codice aggiornato, oppure metti 0000000 (e la sua PEC, se ce l\'ha).'],
-    '00427': ['Il codice destinatario ha 6 caratteri (codice di un ufficio della Pubblica Amministrazione), ma il programma prepara fatture tra privati (FPR12), che vogliono 7 caratteri.', 'Dati del cliente, campo Codice destinatario: per imprese e privati 7 caratteri (o 0000000). Se il cliente è un ente pubblico serve la FatturaPA, che il programma non prepara: avvisa chi ti assiste.'],
-    '00399': ['Il cliente è una Pubblica Amministrazione (è nell\'Indice PA): le sue fatture vanno fatte in formato FatturaPA, non come fattura tra privati.', 'Il programma prepara solo fatture tra privati (FPR12): per un ente pubblico avvisa chi ti assiste.'],
+    '00427': ['Codice destinatario e formato del file non vanno d\'accordo: 6 caratteri (ufficio della Pubblica Amministrazione) vogliono il formato PA (FPA12), 7 caratteri il formato tra privati (FPR12). Capita coi file preparati prima che il programma facesse le fatture PA, o con un codice sbagliato.', 'Dati del cliente, campo Codice destinatario: 6 caratteri per un ente pubblico (codice ufficio dell\'Indice PA), 7 per imprese e privati (o 0000000). Poi rigenera il file: il formato giusto lo sceglie il programma; per un ente pubblico, prima dell\'invio, firmalo con la chiavetta.'],
+    '00399': ['Il cliente è una Pubblica Amministrazione (è nell\'Indice PA), ma il file era una fattura tra privati (FPR12): per un ente pubblico serve il formato PA (FPA12).', 'Dati del cliente, campo Codice destinatario: metti il codice ufficio di 6 caratteri dell\'Indice PA (lo dà l\'ente, o lo trovi su indicepa.gov.it) e rigenera il file: uscirà in formato PA. Prima dell\'invio firmalo con la chiavetta.'],
     // dati del negozio (chi trasmette e chi emette) e rappresentante fiscale: non si correggono qui
     '00300': ['La partita IVA di chi trasmette il file non è valida: il programma ci mette quella del negozio.', 'Non è un dato del cliente: è la partita IVA del negozio, impostata all\'installazione del programma. Avvisa chi ti assiste.'],
     '00301': ['La partita IVA del negozio (chi emette la fattura) non risulta valida in Anagrafe tributaria.', 'Non è un dato del cliente: è la partita IVA del negozio, impostata all\'installazione del programma. Avvisa chi ti assiste.'],
@@ -706,8 +805,15 @@
     '00200': ['Il file non rispetta il formato richiesto dall\'Agenzia.', 'Rigenera il file; se lo scarto si ripete, avvisa chi ti assiste.'],
     '00001': ['Nome del file non valido.', 'Rigenera il file: il programma assegna un nome nuovo.'],
     '00002': ['Nome del file già usato per un invio precedente.', 'Rigenera il file: il programma assegna un progressivo nuovo.'],
-    '00100': ['Certificato di firma scaduto.', 'Riguarda la firma digitale (serve solo per la Pubblica Amministrazione).'],
-    '00102': ['File senza firma digitale valida.', 'Riguarda la firma con la chiavetta (solo per la Pubblica Amministrazione).'],
+    // firma con la chiavetta (solo le fatture agli enti pubblici sono firmate): un file scartato non si
+    // rimanda uguale, si rigenera (nome nuovo) e si firma di nuovo
+    '00100': ['Il certificato della chiavetta con cui è stata firmata la fattura è scaduto.', 'Rinnova il certificato della chiavetta, poi rigenera il file, firmalo di nuovo e rimandalo.'],
+    '00101': ['Il certificato della chiavetta con cui è stata firmata la fattura risulta revocato.', 'Serve una chiavetta con un certificato valido (senti chi l\'ha rilasciata), poi rigenera il file, firmalo di nuovo e rimandalo.'],
+    '00102': ['La firma digitale del file non è valida: il file è stato cambiato dopo la firma, oppure la firma è rovinata.', 'Rigenera il file, firmalo di nuovo con la chiavetta e rimandalo (dopo la firma il file non va aperto né modificato).'],
+    '00103': ['Alla firma manca l\'ora della firma (il «riferimento temporale» che lo SDI vuole).', 'Rigenera il file e firmalo di nuovo col programma della chiavetta, in formato CAdES (file .p7m): l\'ora la mette lui.'],
+    '00104': ['Il certificato con cui è stata firmata la fattura non è di un ente certificatore riconosciuto.', 'Serve la firma digitale della chiavetta (certificato qualificato): rigenera il file, firmalo con quella e rimandalo.'],
+    '00105': ['L\'ora della firma è successiva all\'arrivo del file allo SDI: l\'orologio del computer era avanti.', 'Sistema data e ora del computer, poi rigenera il file, firmalo di nuovo e rimandalo.'],
+    '00107': ['Il certificato con cui è stata firmata la fattura non è valido.', 'Controlla la chiavetta (certificato valido, non sospeso), poi rigenera il file, firmalo di nuovo e rimandalo.'],
   };
   // come Db.LeggiErroriScarto: «00311: testo | 00423: testo» → un riquadro per errore
   const erroriScarto = (testo) => String(testo || '').split('|').map((x) => x.trim()).filter(Boolean).map((t) => {
@@ -740,7 +846,7 @@
         + (c ? '<div class="muto" style="margin-bottom:10px">Sono i dati che finiscono nella fattura elettronica: quasi tutti gli scarti nascono da qui.</div>'
           + '<div class="muto">Ragione sociale</div>' + tb('sc-rag', c.nome, ' style="margin:2px 0 8px"')
           + '<div class="avvolgi">' + campoCli('Partita IVA', 'sc-piva', c.piva, 170, 10) + campoCli('Codice fiscale', 'sc-cf', c.cf, 180, 0) + '</div>'
-          + '<div class="avvolgi">' + campoCli('Codice destinatario', 'sc-sdi', c.sdi, 170, 10, '7 caratteri. Se il cliente non ha un codice: 0000000, più la sua PEC se ce l\'ha') + campoCli('PEC del cliente', 'sc-pec', c.pec, 180, 0) + '</div>'
+          + '<div class="avvolgi">' + campoCli('Codice destinatario', 'sc-sdi', c.sdi, 170, 10, '7 caratteri; 6 per un ente pubblico (codice ufficio dell\'Indice PA: la fattura esce in formato PA, da firmare con la chiavetta). Se il cliente non ha un codice: 0000000, più la sua PEC se ce l\'ha') + campoCli('PEC del cliente', 'sc-pec', c.pec, 180, 0) + '</div>'
           + '<div class="muto">Indirizzo</div>' + tb('sc-ind', c.indirizzo, ' style="margin:2px 0 8px"')
           + '<div class="avvolgi">' + campoCli('CAP', 'sc-cap', c.cap, 80, 10) + campoCli('Città', 'sc-citta', c.citta, 180, 10) + campoCli('Prov.', 'sc-prov', c.prov, 60, 0) + '</div>'
           + btn('Salva i dati del cliente', 'sc-salvacli', { stile: 'padding:7px 14px;margin-top:4px' })
@@ -758,8 +864,9 @@
       const piva = val('sc-piva').trim(), cf = val('sc-cf').trim(), cod = val('sc-sdi').trim();
       if (!piva && !cf) return '⚠ Senza partita IVA né codice fiscale il file verrà scartato di nuovo.';
       if (piva && !/^\d{11}$/.test(piva)) return '⚠ La partita IVA dovrebbe essere di 11 cifre.';
-      // il file è sempre una fattura tra privati (FPR12): un codice di 6 caratteri lo SDI lo scarta (00427)
-      if (cod && cod.length !== 7) return '⚠ Il codice destinatario deve avere 7 caratteri: quelli di 6 sono degli enti pubblici, e il programma non prepara la FatturaPA.';
+      // 7 caratteri = fattura tra privati (FPR12), 6 = ufficio di un ente pubblico (formato PA, FPA12, da firmare)
+      if (cod && cod.length !== 6 && cod.length !== 7) return '⚠ Il codice destinatario deve avere 7 caratteri (imprese e privati, oppure 0000000) o 6 (codice ufficio di un ente pubblico).';
+      if (cod.length === 6) return 'Codice di 6 caratteri = ufficio di un ente pubblico: il file uscirà in formato PA (FatturaPA) e prima dell\'invio andrà firmato con la chiavetta.';
       return '';
     };
     // i campi non ancora salvati restano scritti quando la finestra si ridisegna
@@ -775,16 +882,23 @@
       st.modificato = true;
       G.log('Cliente', 'Corretti i dati di fatturazione del cliente id ' + c.id + ' (dopo uno scarto SDI)', 'cli:' + c.id); G.salva();
       const avviso = controlli();
-      st.cliMsg = { colore: avviso ? 'var(--rosso)' : 'var(--verde)', testo: 'Dati salvati. Ora premi «Rigenera il file» qui sotto: l\'XML verrà rifatto coi dati nuovi.' + (avviso ? '\n' + avviso : '') };
+      // in rosso solo gli avvisi veri (⚠); il codice di un ente pubblico è un'informazione
+      st.cliMsg = { colore: avviso.startsWith('⚠') ? 'var(--rosso)' : 'var(--verde)', testo: 'Dati salvati. Ora premi «Rigenera il file» qui sotto: l\'XML verrà rifatto coi dati nuovi.' + (avviso ? '\n' + avviso : '') };
       aggiorna();
     };
     A['sc-rigenera'] = () => {
       const avviso = c ? controlli() : '';
       G.msgbox({ titolo: 'Rigenera la fattura elettronica', icona: 'domanda', predefinito: 0, testo: (avviso ? avviso + '\n\n' : '') + 'Rifaccio il file della ' + G.numeroFattura(f) + ' con i dati aggiornati?\n\nNumero e data del documento restano gli stessi; cambia solo il numero di invio, perché lo SDI non accetta due volte lo stesso file. Poi il documento torna fra quelli DA INVIARE.', pulsanti: [{ t: 'Sì', az: () => {
+        // il formato si ricalcola dai dati corretti (scarti 00427 / 00399: ora esce in formato PA);
+        // file nuovo = firma nuova
+        const problema = problemaPa(G.cli(f.clienteId));
+        if (problema) { st.msg = { colore: 'var(--rosso)', testo: problema }; aggiorna(); return; }
         f.progressivo = String(++S.numeri.progressivo).padStart(5, '0'); f.sdi = 'GENERATO'; delete f.scarto; delete f.scartoIl;
+        f.formato = perPa(G.cli(f.clienteId)) ? 'FPA12' : 'FPR12'; f.firmato = false; delete f.daFirmare;
         st.modificato = true; st.rigenerato = true;
         G.log('SDI', 'Rigenerato il file della ' + tipoIt(f) + ' n. ' + numeroIt(f) + ' coi dati aggiornati → ' + nomeFile(f) + ' (torna da inviare)', 'doc:' + f.id); G.salva();
-        st.msg = { colore: 'var(--verde)', testo: 'File rifatto: ' + nomeFile(f) + '. Ora la fattura è fra quelle da inviare: mandala con «Invia SDI» nella sezione Fatture.' };
+        st.msg = { colore: 'var(--verde)', testo: 'File rifatto: ' + nomeFile(f) + '. Ora la fattura è fra quelle da inviare: mandala con «Invia SDI» nella sezione Fatture.'
+          + (f.formato === 'FPA12' ? ' È per un ente pubblico (formato PA): prima va firmata con la chiavetta, «Invia SDI» ti dice quale file.' : '') };
         aggiorna();
       } }, { t: 'No', annulla: true }] });
     };

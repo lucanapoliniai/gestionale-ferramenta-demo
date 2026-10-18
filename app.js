@@ -736,7 +736,7 @@
       + '<div class="tipo"><span>' + esc(doc.titolo) + '</span><span>N. ' + esc(doc.numero) + '</span><span>del ' + dataIt(doc.data) + '</span></div>'
       + (doc.causaleTrasporto ? '<div>Causale del trasporto: <b>' + esc(doc.causaleTrasporto) + '</b></div>' : '')
       + '<table><thead><tr><th>Codice</th><th>Descrizione</th><th>UM</th><th class="n">Q.tà</th>' + (doc.senzaPrezzi ? '' : '<th class="n">Prezzo</th><th class="n">Sc.%</th><th class="n">Importo</th><th class="n">IVA</th>') + '</tr></thead><tbody>' + righe + '</tbody></table>'
-      + (doc.note ? '<div style="margin-top:8px"><b>Note:</b> ' + esc(doc.note) + '</div>' : '')
+      + (doc.note ? '<div style="margin-top:8px;white-space:pre-line"><b>Note:</b> ' + esc(doc.note) + '</div>' : '')
       + (doc.extra || '')
       + (doc.senzaPrezzi ? '' : '<div class="piede"><div><table><thead><tr><th class="n">Aliquota</th><th class="n">Imponibile</th><th class="n">Imposta</th></tr></thead><tbody>' + riep + '</tbody></table>'
         + (doc.pagamento ? '<div class="box" style="margin-top:8px"><div class="et">Pagamento</div>' + esc(doc.pagamento) + (doc.scadenza ? ' - scadenza ' + dataIt(doc.scadenza) : '') + '<br>IBAN ' + esc(n.iban) + '</div>' : '') + '</div>'
@@ -747,9 +747,13 @@
   function apriDocumento(doc) {
     finestra({ titolo: (doc.file || (doc.titolo.replace(/ /g, '_') + '_' + String(doc.numero).replace(/\W+/g, '_'))) + '.pdf — Visualizzatore PDF', larghezza: 820, altezza: 700, corpo: foglioDocumento(doc), bianca: true });
   }
+  // fattura a un ente pubblico: CIG, CUP e ordine si stampano in testa alle note (DatiPa.Testo, Db.CaricaDatiFattura)
+  const testoPa = (pa) => [pa.cig ? 'CIG ' + pa.cig : '', pa.cup ? 'CUP ' + pa.cup : '',
+    pa.ordine || pa.data ? 'Ordine/determina' + (pa.ordine ? ' n. ' + pa.ordine : '') + (pa.data ? ' del ' + dataIt(pa.data) : '') : ''].filter(Boolean).join(' · ');
   function docDaFattura(f) {
     const m = metodo(f.metodoId), s = S.scadenze.find((x) => x.fatturaId === f.id);
-    return { tipoDoc: f.tipo, titolo: f.tipo === 'FAC' ? 'FATTURA ACCOMPAGNATORIA' : f.tipo === 'NC' ? 'NOTA DI CREDITO' : 'FATTURA', numero: numeroFattura(f).replace(/^FT /, ''), data: f.data, clienteId: f.clienteId, righe: f.righe, note: f.note || '', pagamento: f.pagTesto || (m ? m.nome : ''), scadenza: s ? s.scadenza : '', file: 'Fattura_' + numeroFattura(f).replace(/\W+/g, '_') };
+    const note = f.pa && testoPa(f.pa) ? testoPa(f.pa) + (f.note ? '\n' + f.note : '') : f.note || '';
+    return { tipoDoc: f.tipo, titolo: f.tipo === 'FAC' ? 'FATTURA ACCOMPAGNATORIA' : f.tipo === 'NC' ? 'NOTA DI CREDITO' : 'FATTURA', numero: numeroFattura(f).replace(/^FT /, ''), data: f.data, clienteId: f.clienteId, righe: f.righe, note, pagamento: f.pagTesto || (m ? m.nome : ''), scadenza: s ? s.scadenza : '', file: 'Fattura_' + numeroFattura(f).replace(/\W+/g, '_') };
   }
   const docDaDdt = (d) => ({ tipoDoc: 'DDT', titolo: 'DOCUMENTO DI TRASPORTO', numero: d.numero + '/' + d.anno, data: d.data, clienteId: d.clienteId, righe: d.righe, causaleTrasporto: d.causale || 'VENDITA', note: d.note || '', file: 'DDT_' + d.numero + '_' + d.anno });
 

@@ -568,21 +568,25 @@
     const c = richiediCliente(u, 'Per la fattura accompagnatoria seleziona un cliente (con P.IVA o codice fiscale).'); if (!c) return;
     if (!c.piva && !c.cf) { u.msg = { colore: 'var(--rosso)', testo: 'Il cliente non ha né partita IVA né codice fiscale: la fattura elettronica non si può fare.' }; G.ridisegna(); return; }
     const regime = S.causaliIva.find((x) => x.id === u.regimeId) || S.causaliIva[0];
-    const righe = u.carrello.map((r) => ({ artId: r.artId, codice: r.codice, descr: r.descr, um: r.um, qta: r.qta, prezzo: r.prezzo, sconto: r.sconto, iva: regime.natura ? 0 : r.iva, listino: r.listino }));
-    const t = G.totaliRighe(righe);
-    const anno = Number(G.OGGI.slice(0, 4));
-    const f = { id: G.nuovoId(), tipo: 'FAC', numero: ++S.numeri.fac, anno, data: G.OGGI, clienteId: c.id, righe, imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId: u.metodoId, pagTesto: '', ddtIds: [], sdi: 'GENERATO', mail: '', progressivo: String(++S.numeri.progressivo).padStart(5, '0'), causaleIvaId: regime.id, note: '' };
-    S.fatture.push(f);
-    const daIncassare = regime.split ? t.imponibile : t.totale;
-    S.scadenze.push({ id: G.nuovoId(), tipo: 'ATTIVA', soggettoId: c.id, fatturaId: f.id, documento: String(f.numero), dataDoc: f.data, scadenza: G.scadenzaFattura(f.metodoId, '', f.data), importo: daIncassare, pagato: 0, stato: 'APERTA', metodo: G.metodo(f.metodoId).nome, conto: '', note: '', incassi: [] });
-    scalaMagazzino(righe, 1);
-    G.indicizza();
-    G.log('Fattura', 'Emessa fattura accompagnatoria n. FAC ' + f.numero + ' a ' + c.nome + ' · € ' + G.z2(f.totale), 'doc:' + f.id);
-    u.msg = { colore: 'var(--verde)', testo: 'Fattura accompagnatoria FAC ' + f.numero + ' emessa' + (regime.codice !== 'ORD' ? ' (' + regime.descr + ')' : '') + ' · XML FatturaPA generato (IT' + S.negozio.piva + '_' + f.progressivo + '.xml)' };
-    const eraSolo = soloPerFattura(u.metodoId);
-    pulisciDopo(u);
-    if (eraSolo) tornaAContanti(u);
-    G.salva(); G.ridisegna();
+    // ente pubblico: prima CIG, CUP e ordine (e il promemoria della firma)
+    G.chiediEntePubblico(c.id, 'fattura accompagnatoria', regime, (pa) => {
+      const righe = u.carrello.map((r) => ({ artId: r.artId, codice: r.codice, descr: r.descr, um: r.um, qta: r.qta, prezzo: r.prezzo, sconto: r.sconto, iva: regime.natura ? 0 : r.iva, listino: r.listino }));
+      const t = G.totaliRighe(righe);
+      const anno = Number(G.OGGI.slice(0, 4));
+      const f = { id: G.nuovoId(), tipo: 'FAC', numero: ++S.numeri.fac, anno, data: G.OGGI, clienteId: c.id, righe, imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId: u.metodoId, pagTesto: '', ddtIds: [], sdi: 'GENERATO', mail: '', progressivo: String(++S.numeri.progressivo).padStart(5, '0'), causaleIvaId: regime.id, note: '', formato: G.perPa(c) ? 'FPA12' : 'FPR12' };
+      if (pa) f.pa = pa;
+      S.fatture.push(f);
+      const daIncassare = regime.split ? t.imponibile : t.totale;
+      S.scadenze.push({ id: G.nuovoId(), tipo: 'ATTIVA', soggettoId: c.id, fatturaId: f.id, documento: String(f.numero), dataDoc: f.data, scadenza: G.scadenzaFattura(f.metodoId, '', f.data), importo: daIncassare, pagato: 0, stato: 'APERTA', metodo: G.metodo(f.metodoId).nome, conto: '', note: '', incassi: [] });
+      scalaMagazzino(righe, 1);
+      G.indicizza();
+      G.log('Fattura', 'Emessa fattura accompagnatoria n. FAC ' + f.numero + ' a ' + c.nome + ' · € ' + G.z2(f.totale), 'doc:' + f.id);
+      u.msg = { colore: 'var(--verde)', testo: 'Fattura accompagnatoria FAC ' + f.numero + ' emessa' + (regime.codice !== 'ORD' ? ' (' + regime.descr + ')' : '') + ' · XML FatturaPA generato (IT' + S.negozio.piva + '_' + f.progressivo + '.xml)' + (pa ? ' · ' + G.NOTA_FIRMA : '') };
+      const eraSolo = soloPerFattura(u.metodoId);
+      pulisciDopo(u);
+      if (eraSolo) tornaAContanti(u);
+      G.salva(); G.ridisegna();
+    });
   };
   function emettiDoc(tipo) {
     const S = G.S, u = banco();

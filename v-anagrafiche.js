@@ -56,11 +56,18 @@
     } else if (tipo === 'ENTE') {
       if (!cf && !piva) err.push('Un ente/associazione deve avere almeno il codice fiscale (ed eventuale P.IVA).');
     } else if (tipo === 'PA') {
-      if (!cf) avv.push('PA senza codice fiscale: verificare.');
-      if (!sdi || sdi.trim().length !== 6) err.push('Per la PA serve il codice destinatario (codice ufficio IPA di 6 caratteri).');
+      if (!cf && !piva) err.push('Un ente pubblico deve avere il codice fiscale o la partita IVA.');
+      if (!sdi || sdi.trim().length !== 6) err.push('Per un ente pubblico serve il codice destinatario di 6 caratteri: è il codice ufficio dell\'Indice PA (lo dà l\'ente, o si trova su indicepa.gov.it). Con quello la fattura esce in formato PA.');
     }
-    if (tipo !== 'PA' && sdi && ![6, 7].includes(sdi.trim().length)) avv.push('Codice destinatario SDI di lunghezza inattesa (7 caratteri per aziende, 6 per PA).');
+    // codice destinatario: 7 caratteri per imprese e privati (o 0000000 con la PEC), 6 per gli uffici degli enti pubblici
+    const codicePa = tipo !== 'PA' && !!sdi && sdi.trim().length === 6;
+    if (tipo !== 'PA' && sdi && sdi.trim() && ![6, 7].includes(sdi.trim().length)) avv.push('Codice destinatario SDI di lunghezza inattesa (7 caratteri per imprese e privati, 6 per gli enti pubblici).');
     if (pec && !pec.includes('@')) err.push('PEC non valida (manca la @).');
+    if (codicePa) {
+      // si vede anche quando il salvataggio è bloccato da altro (i clienti migrati sono tutti «privati»)
+      const pa = 'Il codice destinatario di 6 caratteri è quello di un ufficio della Pubblica Amministrazione: le fatture a questo cliente usciranno in formato PA e andranno firmate con la chiavetta. Se è un ente pubblico, scegli il tipo «Pubblica amministrazione».';
+      if (err.length) err.push(pa); else avv.push(pa);
+    }
     return { err, avv };
   }
 
