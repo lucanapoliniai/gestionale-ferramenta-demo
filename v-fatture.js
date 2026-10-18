@@ -668,27 +668,53 @@
   // ---- correzione della fattura scartata (ScartoWindow) ----
   // traduzione dei codici di scarto: la stessa tabella del programma (Db.Scarti.cs, ScartiNoti)
   const SCARTI_NOTI = {
-    '00301': ['La partita IVA del cliente non esiste o non è scritta bene.', 'Dati del cliente, campo Partita IVA (11 cifre).'],
-    '00302': ['Il codice fiscale del cliente non è valido.', 'Dati del cliente, campo Codice fiscale.'],
-    '00303': ['Il codice fiscale del cliente non è valido.', 'Dati del cliente, campo Codice fiscale.'],
-    '00305': ['Il codice destinatario non è valido.', 'Dati del cliente: 7 caratteri per le imprese, 6 per la Pubblica Amministrazione; in mancanza si usa 0000000 con la PEC.'],
-    '00306': ['Il codice destinatario non è valido.', 'Dati del cliente, campo Codice destinatario.'],
-    '00311': ['Il codice destinatario non è valido.', 'Dati del cliente, campo Codice destinatario.'],
-    '00312': ['Il codice destinatario non è più attivo: quel canale non esiste più.', 'Chiedi al cliente il codice destinatario aggiornato (oppure metti 0000000 e la sua PEC).'],
-    '00313': ['Il codice destinatario della Pubblica Amministrazione non è valido.', 'Dati del cliente: per gli enti pubblici il codice è di 6 caratteri (IPA).'],
-    '00320': ['Manca sia il codice destinatario sia la PEC del cliente.', 'Dati del cliente: metti il codice destinatario, oppure 0000000 e la PEC.'],
-    '00321': ['Codice destinatario 0000000 senza PEC del cliente.', 'Dati del cliente: aggiungi la PEC.'],
+    // dati del cliente e codice destinatario: si correggono qui nella finestra
+    '00305': ['La partita IVA del cliente non è valida: è scritta male oppure non risulta in Anagrafe tributaria (per esempio è cessata).', 'Dati del cliente, campo Partita IVA (11 cifre): ricontrollala col cliente o con «Verifica partita IVA» sul sito dell\'Agenzia delle Entrate.'],
+    '00306': ['Il codice fiscale del cliente non è valido: è scritto male oppure non risulta in Anagrafe tributaria.', 'Dati del cliente, campo Codice fiscale (16 caratteri per le persone, 11 cifre per società ed enti).'],
+    '00324': ['Partita IVA e codice fiscale del cliente non appartengono allo stesso soggetto.', 'Dati del cliente: ricontrolla Partita IVA e Codice fiscale (per un\'impresa la fattura elettronica accetta anche la sola partita IVA).'],
     '00417': ['Del cliente non c\'è né partita IVA né codice fiscale.', 'Dati del cliente: per un privato serve almeno il codice fiscale.'],
-    '00404': ['Fattura DOPPIA: stesso numero e stessa data già inviati.', 'Il numero è già stato usato: emetti il documento con un numero nuovo.'],
-    '00423': ['Il totale del documento non torna con imponibile e imposta.', 'Controlla gli importi del documento, poi rigenera il file.'],
+    '00311': ['Il codice destinatario non è valido.', 'Dati del cliente, campo Codice destinatario.'],
+    '00312': ['Il codice destinatario esiste ma non è attivo (dismesso o non ancora attivato).', 'Chiedi al cliente il codice aggiornato, oppure metti 0000000 (e la sua PEC, se ce l\'ha).'],
+    '00427': ['Il codice destinatario ha 6 caratteri (codice di un ufficio della Pubblica Amministrazione), ma il programma prepara fatture tra privati (FPR12), che vogliono 7 caratteri.', 'Dati del cliente, campo Codice destinatario: per imprese e privati 7 caratteri (o 0000000). Se il cliente è un ente pubblico serve la FatturaPA, che il programma non prepara: avvisa chi ti assiste.'],
+    '00399': ['Il cliente è una Pubblica Amministrazione (è nell\'Indice PA): le sue fatture vanno fatte in formato FatturaPA, non come fattura tra privati.', 'Il programma prepara solo fatture tra privati (FPR12): per un ente pubblico avvisa chi ti assiste.'],
+    // dati del negozio (chi trasmette e chi emette) e rappresentante fiscale: non si correggono qui
+    '00300': ['La partita IVA di chi trasmette il file non è valida: il programma ci mette quella del negozio.', 'Non è un dato del cliente: è la partita IVA del negozio, impostata all\'installazione del programma. Avvisa chi ti assiste.'],
+    '00301': ['La partita IVA del negozio (chi emette la fattura) non risulta valida in Anagrafe tributaria.', 'Non è un dato del cliente: è la partita IVA del negozio, impostata all\'installazione del programma. Avvisa chi ti assiste.'],
+    '00302': ['Il codice fiscale del negozio (chi emette la fattura) non è valido.', 'Non è un dato del cliente: è il codice fiscale del negozio, impostato all\'installazione del programma. Avvisa chi ti assiste.'],
+    '00303': ['La partita IVA del rappresentante fiscale (di un venditore o di un cliente estero) non è valida.', 'Il programma non compila il rappresentante fiscale: se compare questo scarto, avvisa chi ti assiste.'],
+    '00320': ['Partita IVA e codice fiscale del negozio (chi emette la fattura) non corrispondono tra loro.', 'Non sono dati del cliente: sono quelli del negozio, impostati all\'installazione del programma. Avvisa chi ti assiste.'],
+    '00321': ['Il codice fiscale del negozio non fa parte del gruppo IVA indicato dalla partita IVA (riguarda solo i gruppi IVA).', 'Non sono dati del cliente: sono quelli del negozio, impostati all\'installazione del programma. Avvisa chi ti assiste.'],
+    // righe, aliquote e riepilogo IVA
+    '00400': ['Una riga ha IVA a zero ma manca la «natura» che spiega il perché (esente, non imponibile, reverse charge…).', 'IVA a zero voluta: rifai il documento col regime IVA giusto (esente, non imponibile…). IVA a zero per sbaglio: correggi l\'aliquota dell\'articolo e rifai il documento.'],
+    '00401': ['C\'è una «natura» su una riga che però ha IVA diversa da zero.', 'Il regime IVA scelto non va d\'accordo con le aliquote: rifai il documento col regime giusto.'],
+    '00429': ['Nel riepilogo IVA c\'è un\'aliquota a zero senza la «natura» che spiega il perché.', 'IVA a zero voluta: rifai il documento col regime IVA giusto (esente, non imponibile…). IVA a zero per sbaglio: correggi l\'aliquota dell\'articolo e rifai il documento.'],
+    '00430': ['Nel riepilogo IVA c\'è una «natura» su un\'aliquota diversa da zero.', 'Il regime IVA scelto non va d\'accordo con le aliquote: rifai il documento col regime giusto.'],
+    '00411': ['Una riga è segnata come soggetta a ritenuta d\'acconto, ma nel documento mancano i dati della ritenuta.', 'Il programma non gestisce la ritenuta d\'acconto: se compare questo scarto, avvisa chi ti assiste.'],
+    '00419': ['Manca il riepilogo IVA per un\'aliquota usata nelle righe.', 'Problema di calcolo: rigenera il file; se resta, avvisa chi ti assiste.'],
+    '00421': ['Nel riepilogo IVA l\'imposta non è uguale a imponibile × aliquota (sbaglio oltre 1 centesimo).', 'È un errore di calcolo del file, non dei dati: rigenera il file; se lo scarto si ripete, avvisa chi ti assiste.'],
+    '00422': ['Nel riepilogo IVA l\'imponibile non è uguale alla somma delle righe con quell\'aliquota (sbaglio di 1 euro o più).', 'È un errore di calcolo del file, non dei dati: rigenera il file; se lo scarto si ripete, avvisa chi ti assiste.'],
+    '00423': ['Su una riga il prezzo totale non è uguale a prezzo unitario × quantità, sconti compresi (sbaglio oltre 1 centesimo).', 'Guarda quella riga in «Righe del documento» qui sotto (quantità, prezzo, sconto) e rigenera il file; se lo scarto si ripete, avvisa chi ti assiste.'],
+    '00424': ['Un\'aliquota IVA è scritta come frazione (0,22) invece che in percentuale (22).', 'Controlla l\'aliquota IVA delle righe: va scritta 22, 10, 4…; poi rigenera il file. Se è giusta, avvisa chi ti assiste.'],
+    '00443': ['Un\'aliquota IVA usata in una riga non compare nel riepilogo IVA del documento.', 'È un errore di calcolo del file, non dei dati: rigenera il file; se lo scarto si ripete, avvisa chi ti assiste.'],
+    // numero e data del documento
+    '00403': ['La data della fattura non è ammessa.', 'La data del documento non può essere futura.'],
+    '00404': ['Fattura DOPPIA: allo SDI risulta già una fattura del negozio con lo stesso numero nello stesso anno (non scartata).', 'Prima controlla se quella fattura era già stata consegnata: se è la stessa, è valida e non va rimandata; se è un documento diverso, va rifatto con un numero nuovo.'],
+    '00409': ['Fattura doppia nello stesso file: un file con più fatture (lotto) ne contiene due con lo stesso numero nello stesso anno.', 'Il programma mette una fattura per file: rigenera il file; se lo scarto si ripete, avvisa chi ti assiste.'],
+    '00418': ['La nota di credito ha una data precedente a quella della fattura che corregge.', 'Controlla la data della nota di credito e quella della fattura a cui si riferisce.'],
+    '00425': ['Il numero della fattura non è valido: deve contenere almeno una cifra.', 'Numerazione del documento.'],
+    // file e firma
     '00200': ['Il file non rispetta il formato richiesto dall\'Agenzia.', 'Rigenera il file; se lo scarto si ripete, avvisa chi ti assiste.'],
+    '00001': ['Nome del file non valido.', 'Rigenera il file: il programma assegna un nome nuovo.'],
+    '00002': ['Nome del file già usato per un invio precedente.', 'Rigenera il file: il programma assegna un progressivo nuovo.'],
+    '00100': ['Certificato di firma scaduto.', 'Riguarda la firma digitale (serve solo per la Pubblica Amministrazione).'],
+    '00102': ['File senza firma digitale valida.', 'Riguarda la firma con la chiavetta (solo per la Pubblica Amministrazione).'],
   };
   // come Db.LeggiErroriScarto: «00311: testo | 00423: testo» → un riquadro per errore
   const erroriScarto = (testo) => String(testo || '').split('|').map((x) => x.trim()).filter(Boolean).map((t) => {
     const dp = t.indexOf(':');
     const codice = dp > 0 && dp <= 6 ? t.slice(0, dp).trim() : '';
     const noto = SCARTI_NOTI[codice];
-    return { titolo: codice ? 'Errore ' + codice : 'Errore', descr: codice ? t.slice(dp + 1).trim() : t, significa: noto ? noto[0] : 'Motivo indicato dall\'Agenzia delle Entrate (qui sopra).', dove: noto ? noto[1] : 'Correggi il dato segnalato, poi rigenera il file e rimandalo.' };
+    return { titolo: codice ? 'Errore ' + codice : 'Errore', descr: codice ? t.slice(dp + 1).trim() : t, significa: noto ? noto[0] : 'Motivo indicato dall\'Agenzia delle Entrate (qui sotto).', dove: noto ? noto[1] : 'Correggi il dato segnalato, poi rigenera il file e rimandalo.' };
   });
   A['pec-correggi'] = () => {
     const u = pc(), f = G.selezionato('pec-scarti');
@@ -714,7 +740,7 @@
         + (c ? '<div class="muto" style="margin-bottom:10px">Sono i dati che finiscono nella fattura elettronica: quasi tutti gli scarti nascono da qui.</div>'
           + '<div class="muto">Ragione sociale</div>' + tb('sc-rag', c.nome, ' style="margin:2px 0 8px"')
           + '<div class="avvolgi">' + campoCli('Partita IVA', 'sc-piva', c.piva, 170, 10) + campoCli('Codice fiscale', 'sc-cf', c.cf, 180, 0) + '</div>'
-          + '<div class="avvolgi">' + campoCli('Codice destinatario', 'sc-sdi', c.sdi, 170, 10, '7 caratteri (imprese) o 6 (Pubblica Amministrazione). Se non ce l\'ha: 0000000 e compila la PEC') + campoCli('PEC del cliente', 'sc-pec', c.pec, 180, 0) + '</div>'
+          + '<div class="avvolgi">' + campoCli('Codice destinatario', 'sc-sdi', c.sdi, 170, 10, '7 caratteri. Se il cliente non ha un codice: 0000000, più la sua PEC se ce l\'ha') + campoCli('PEC del cliente', 'sc-pec', c.pec, 180, 0) + '</div>'
           + '<div class="muto">Indirizzo</div>' + tb('sc-ind', c.indirizzo, ' style="margin:2px 0 8px"')
           + '<div class="avvolgi">' + campoCli('CAP', 'sc-cap', c.cap, 80, 10) + campoCli('Città', 'sc-citta', c.citta, 180, 10) + campoCli('Prov.', 'sc-prov', c.prov, 60, 0) + '</div>'
           + btn('Salva i dati del cliente', 'sc-salvacli', { stile: 'padding:7px 14px;margin-top:4px' })
@@ -726,14 +752,14 @@
         + btn('Chiudi', 'chiudi-finestra', { stile: 'padding:8px 18px;margin:0 0 6px 0' })
         + '<span style="margin:0 0 6px 14px;font-size:12.5px;max-width:420px;color:' + (st.msg ? st.msg.colore : 'inherit') + '">' + (st.msg ? esc(st.msg.testo) : '') + '</span></div></div>',
       dopoChiusa: () => { if (st.modificato) { G.deseleziona('pec-scarti'); pc().msg = { colore: 'var(--verde)', testo: 'Elenco aggiornato dopo la correzione.' }; } G.ridisegna(); } });
-    // avvisi sui dati che fanno scartare i file (come Controlli(): avvisano, non bloccano)
+    // avvisi sui dati che fanno scartare i file (come Controlli(): avvisano, non bloccano); codice vuoto
+    // o 0000000 senza PEC non fa scartare niente: il programma scrive 0000000 e lo SDI lo accetta
     const controlli = () => {
-      const piva = val('sc-piva').trim(), cf = val('sc-cf').trim(), cod = val('sc-sdi').trim(), pec = val('sc-pec').trim();
+      const piva = val('sc-piva').trim(), cf = val('sc-cf').trim(), cod = val('sc-sdi').trim();
       if (!piva && !cf) return '⚠ Senza partita IVA né codice fiscale il file verrà scartato di nuovo.';
       if (piva && !/^\d{11}$/.test(piva)) return '⚠ La partita IVA dovrebbe essere di 11 cifre.';
-      if (!cod && !pec) return '⚠ Senza codice destinatario né PEC il file verrà scartato: metti 0000000 e la PEC del cliente.';
-      if (cod && cod.length !== 6 && cod.length !== 7) return '⚠ Il codice destinatario deve avere 7 caratteri (6 per la Pubblica Amministrazione).';
-      if (cod === '0000000' && !pec) return '⚠ Con codice destinatario 0000000 serve la PEC del cliente.';
+      // il file è sempre una fattura tra privati (FPR12): un codice di 6 caratteri lo SDI lo scarta (00427)
+      if (cod && cod.length !== 7) return '⚠ Il codice destinatario deve avere 7 caratteri: quelli di 6 sono degli enti pubblici, e il programma non prepara la FatturaPA.';
       return '';
     };
     // i campi non ancora salvati restano scritti quando la finestra si ridisegna

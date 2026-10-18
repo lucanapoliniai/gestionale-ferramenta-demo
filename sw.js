@@ -1,6 +1,6 @@
 // Fa funzionare la demo anche senza rete: al primo avvio con internet copia tutti i file
 // nell'iPad, poi li prende sempre da li'. La versione cambia da sola quando cambia la demo.
-const VERSIONE = 'gf-demo-6e1e65aa83';
+const VERSIONE = 'gf-demo-96c9653d2b';
 const FILE = ["./", "./index.html", "./manifest.webmanifest", "./styles.css", "./dati.js", "./icone.js", "./app.js", "./v-banco.js", "./v-anagrafiche.js", "./v-documenti.js", "./v-conti.js", "./v-fatture.js", "./apple-touch-icon.png", "./icona-192.png", "./icona-512.png"];
 
 self.addEventListener('install', (e) => {

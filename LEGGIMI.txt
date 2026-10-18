@@ -13,4 +13,4 @@ Per aggiornarla: rilanciare prepara_sito.py e ricaricare la cartella.
 L'iPad prende la versione nuova la prima volta che apre l'app con la rete
 (e la mostra all'apertura successiva).
 
-Versione: 6e1e65aa83
+Versione: 96c9653d2b
