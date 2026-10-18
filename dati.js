@@ -1,7 +1,8 @@
 /* Dati dimostrativi della demo per iPad.
    Una ferramenta agraria INVENTATA: nessun cliente, prezzo o documento veri.
-   Tutto nasce da un generatore ripetibile (stesso seme = stessi nomi) e le date sono
-   calcolate a partire da oggi, cosi' la demo e' sempre "fresca" quando la si mostra. */
+   Tutto nasce da un generatore ripetibile (stesso seme = stessi nomi) e le date sono calcolate a
+   partire da oggi, così la demo è sempre "fresca" quando la si mostra. Le tabelle hanno gli stessi
+   campi del programma vero (metodi di pagamento con gli stessi numeri, regimi IVA, aliquote...). */
 (function () {
   'use strict';
 
@@ -46,48 +47,87 @@
     return s + ((10 - (somma % 10)) % 10);
   }
 
-  function partitaIva(C) {
-    let s = '';
-    for (let i = 0; i < 7; i++) s += C.intero(0, 9);
-    s += '054';
+  // partita IVA: 7 cifre, ufficio 054 (Perugia), cifra di controllo come Anagrafica.PartitaIvaValida
+  function controlloPiva(dieci) {
+    let s = 0;
+    for (let i = 0; i < 10; i++) { let c = Number(dieci[i]); if (i % 2 === 1) { c *= 2; if (c > 9) c -= 9; } s += c; }
+    return String((10 - (s % 10)) % 10);
+  }
+  function partitaIva(C) { let s = ''; for (let i = 0; i < 7; i++) s += C.intero(0, 9); s += '054'; return s + controlloPiva(s); }
+
+  // codice fiscale vero nella forma (cognome, nome, data, comune) con il carattere di controllo giusto
+  const DISPARI = { 0: 1, 1: 0, 2: 5, 3: 7, 4: 9, 5: 13, 6: 15, 7: 17, 8: 19, 9: 21, A: 1, B: 0, C: 5, D: 7, E: 9, F: 13, G: 15, H: 17, I: 19, J: 21, K: 2, L: 4, M: 18, N: 20, O: 11, P: 3, Q: 6, R: 8, S: 12, T: 14, U: 16, V: 10, W: 22, X: 25, Y: 24, Z: 23 };
+  const consonanti = (s) => s.toUpperCase().replace(/[^A-Z]/g, '').replace(/[AEIOU]/g, '');
+  const vocali = (s) => s.toUpperCase().replace(/[^AEIOU]/g, '');
+  function codiceFiscale(cognome, nome, anno, mese, giorno, femmina, comune) {
+    const cg = (consonanti(cognome) + vocali(cognome) + 'XXX').slice(0, 3);
+    const cn = consonanti(nome);
+    const nm = cn.length >= 4 ? cn[0] + cn[2] + cn[3] : (cn + vocali(nome) + 'XXX').slice(0, 3);
+    const base = cg + nm + pad(anno % 100) + 'ABCDEHLMPRST'[mese - 1] + pad(giorno + (femmina ? 40 : 0)) + comune;
     let somma = 0;
-    for (let i = 0; i < 10; i++) {
-      let c = Number(s[i]);
-      if (i % 2 === 1) { c *= 2; if (c > 9) c -= 9; }
-      somma += c;
-    }
-    return s + ((10 - (somma % 10)) % 10);
+    for (let i = 0; i < 15; i++) { const c = base[i]; somma += i % 2 === 0 ? DISPARI[c] : (/\d/.test(c) ? Number(c) : c.charCodeAt(0) - 65); }
+    return base + String.fromCharCode(65 + (somma % 26));
   }
 
   // ---------- il negozio inventato ----------
   const NEGOZIO = {
-    nome: 'Ferramenta Rossi',
-    sotto: 'Agraria · dati dimostrativi',
-    ragione: 'FERRAMENTA AGRARIA ROSSI S.N.C.',
-    indirizzo: 'Via dei Mestieri 8',
-    cap: '06100', citta: 'Perugia', prov: 'PG',
-    piva: '01234567890',
-    tel: '075 000 0000',
-    email: 'info@ferramentarossi.example',
-    iban: 'IT00 X000 0000 0000 0000 0000 000',
+    nome1: 'Ferramenta Agraria', nome2: 'Rossi · Perugia', titolo: 'Ferramenta Agraria Rossi',
+    ragione: 'FERRAMENTA AGRARIA ROSSI S.N.C. DI ROSSI GIORGIO & C.',
+    indirizzo: 'Via dei Mestieri 8', cap: '06132', citta: 'Perugia', prov: 'PG',
+    tel: '075 000 1234', email: 'info@ferramentarossi.example', pec: 'ferramentarossi@pec.example',
+    iban: 'IT60 X054 2811 1010 0000 0123 456', banca: 'Banca del Centro', rea: 'PG-000000',
   };
+  const OPERATORI = [
+    { id: 1, utente: 'giorgio', nome: 'GIORGIO ROSSI', admin: true, attivo: true, haPin: true },
+    { id: 2, utente: 'anna', nome: 'ANNA ROSSI', admin: true, attivo: true, haPin: true },
+    { id: 3, utente: 'matteo', nome: 'MATTEO BIANCHI', admin: false, attivo: true, haPin: true },
+  ];
 
-  // codice, nome, IVA, ricarico A (min-max), colore delle barre (stessa tavolozza varia dell'Analisi vera)
+  // pagamenti come nel programma vero: stessi numeri, stessi nomi, giorni esatti dalla data della fattura
+  const METODI = [
+    { id: 1, codice: 'CONTANTI', nome: 'Contanti', giorni: 0, fe: 'MP01', tipo: 'CONTANTI' },
+    { id: 2, codice: 'CARTA', nome: 'Carta di pagamento', giorni: 0, fe: 'MP08', tipo: 'CARTA' },
+    { id: 3, codice: 'BONIF30', nome: 'Bonifico 30gg fine mese', giorni: 30, fe: 'MP05', tipo: 'BONIFICO' },
+    { id: 4, codice: 'BONIF60FM', nome: 'Bonifico 60gg fine mese', giorni: 60, fe: 'MP05', tipo: 'BONIFICO' },
+    { id: 5, codice: 'BONIF90FM', nome: 'Bonifico 90gg fine mese', giorni: 90, fe: 'MP05', tipo: 'BONIFICO' },
+    { id: 6, codice: 'BONIF120FM', nome: 'Bonifico 120gg fine mese', giorni: 120, fe: 'MP05', tipo: 'BONIFICO' },
+    { id: 17, codice: 'ASSEGNO', nome: 'Assegno', giorni: 0, fe: 'MP02', tipo: 'ASSEGNO' },
+    { id: 18, codice: 'BONIFICO', nome: 'Bonifico', giorni: 0, fe: 'MP05', tipo: 'BONIFICO' },
+    { id: 19, codice: 'RIBA30FM', nome: 'Riba 30gg fine mese', giorni: 30, fe: 'MP12', tipo: 'CREDITO' },
+    { id: 20, codice: 'RIBA60FM', nome: 'Riba 60gg fine mese', giorni: 60, fe: 'MP12', tipo: 'CREDITO' },
+    { id: 21, codice: 'RIBA90FM', nome: 'Riba 90gg fine mese', giorni: 90, fe: 'MP12', tipo: 'CREDITO' },
+    { id: 22, codice: 'RIBA120FM', nome: 'Riba 120gg fine mese', giorni: 120, fe: 'MP12', tipo: 'CREDITO' },
+    { id: 25, codice: 'RID', nome: 'RID', giorni: 0, fe: 'MP09', tipo: 'BONIFICO' },
+  ];
+  const CAUSALI_IVA = [
+    { id: 1, codice: 'ORD', descr: 'IVA ordinaria', natura: null, split: false, rc: false, dicitura: '' },
+    { id: 2, codice: 'SPLIT', descr: 'Split payment (scissione pagamenti)', natura: null, split: true, rc: false, dicitura: 'Scissione dei pagamenti ai sensi dell\'art. 17-ter del DPR 633/72' },
+    { id: 3, codice: 'RC', descr: 'Reverse charge (inversione contabile)', natura: 'N6.9', split: false, rc: true, dicitura: 'Inversione contabile ai sensi dell\'art. 17 del DPR 633/72' },
+    { id: 4, codice: 'RC-ROTT', descr: 'Reverse charge rottami', natura: 'N6.1', split: false, rc: true, dicitura: 'Inversione contabile art. 74 c. 7 e 8 DPR 633/72' },
+    { id: 5, codice: 'RC-EPAL', descr: 'Reverse charge bancali/EPAL usati', natura: 'N6.1', split: false, rc: true, dicitura: 'Inversione contabile art. 74 c. 7 e 8 DPR 633/72' },
+    { id: 6, codice: 'NI-ESP', descr: 'Non imponibile - esportazione', natura: 'N3.1', split: false, rc: false, dicitura: 'Operazione non imponibile art. 8 DPR 633/72' },
+    { id: 7, codice: 'ES', descr: 'Esente', natura: 'N4', split: false, rc: false, dicitura: 'Operazione esente art. 10 DPR 633/72' },
+    { id: 8, codice: 'FC', descr: 'Fuori campo IVA', natura: 'N2.2', split: false, rc: false, dicitura: 'Operazione fuori campo IVA' },
+  ];
+  const ALIQUOTE = [
+    { id: 1, codice: '22', aliquota: 22 }, { id: 2, codice: '10', aliquota: 10 }, { id: 3, codice: '05', aliquota: 5 },
+    { id: 4, codice: '04', aliquota: 4 }, { id: 5, codice: 'N4', aliquota: 0 },
+  ];
+  const CONTI = [
+    { codice: 'CASSA', nome: 'Contanti', tipo: 'CASSA' },
+    { codice: 'BANCA', nome: 'Banca del Centro c/c', tipo: 'BANCA' },
+    { codice: 'POS', nome: 'POS / carte', tipo: 'POS' },
+    { codice: 'ASSEGNI', nome: 'Assegni', tipo: 'ASSEGNI' },
+    { codice: 'BANCA2', nome: 'Credito Umbro c/c', tipo: 'BANCA' },
+  ];
+
+  // codice, descrizione, IVA, ricarico A (min-max), colore
   const CATEGORIE = [
-    ['FERR', 'Ferramenta e minuteria', 22, 55, 95, '#2E7D32'],
-    ['UTEN', 'Utensili', 22, 35, 60, '#5C6B7A'],
-    ['IDRA', 'Idraulica', 22, 45, 80, '#0E9AA7'],
-    ['ELET', 'Materiale elettrico', 22, 45, 75, '#3B82F6'],
-    ['VERN', 'Vernici e colori', 22, 40, 65, '#6366F1'],
-    ['GIAR', 'Giardinaggio', 22, 40, 70, '#8B5CF6'],
-    ['IRRI', 'Irrigazione', 22, 35, 60, '#D9468A'],
-    ['CONC', 'Concimi', 4, 18, 30, '#E8590C'],
-    ['FITO', 'Fitosanitari', 22, 18, 32, '#F59F00'],
-    ['SEME', 'Sementi', 4, 40, 70, '#0B7285'],
-    ['MANG', 'Mangimi', 10, 15, 25, '#C0392B'],
-    ['ENOL', 'Enologia', 22, 30, 55, '#7C3AED'],
-    ['CASA', 'Casalinghi', 22, 45, 80, '#64748B'],
-    ['ANTI', 'Antinfortunistica', 22, 40, 70, '#15803D'],
+    ['FERR', 'FERRAMENTA E MINUTERIA', 22, 55, 95], ['UTEN', 'UTENSILERIA', 22, 35, 60], ['IDRA', 'IDRAULICA', 22, 45, 80],
+    ['ELET', 'MATERIALE ELETTRICO', 22, 45, 75], ['VERN', 'VERNICI E COLORI', 22, 40, 65], ['GIAR', 'GIARDINAGGIO', 22, 40, 70],
+    ['IRRI', 'IRRIGAZIONE', 22, 35, 60], ['CONC', 'CONCIMI', 4, 18, 30], ['FITO', 'FITOSANITARI', 22, 18, 32],
+    ['SEME', 'SEMENTI', 4, 40, 70], ['MANG', 'MANGIMI', 10, 15, 25], ['ENOL', 'ENOLOGIA', 22, 30, 55],
+    ['CASA', 'CASALINGHI', 22, 45, 80], ['ANTI', 'ANTINFORTUNISTICA', 22, 40, 70],
   ];
 
   // descrizione ({v} = variante), unita' di misura, costo min, costo max, giacenza max, varianti
@@ -242,59 +282,43 @@
     ],
   };
 
+  // ragione sociale, referente, città, provincia, CAP, categorie servite
   const FORNITORI = [
-    ['Viteria Centro Italia Srl', 'Arezzo', ['FERR']],
-    ['Utensileria Adriatica Srl', 'Ancona', ['UTEN']],
-    ['Idrotermica Tiberina Srl', 'Terni', ['IDRA']],
-    ['Elettroforniture Valle Umbra Srl', 'Foligno', ['ELET']],
-    ['Colorificio Appennino Snc', 'Gubbio', ['VERN']],
-    ['Verde Attrezzature Srl', 'Pistoia', ['GIAR']],
-    ['Irrigazione Moderna Srl', 'Latina', ['IRRI']],
-    ['Agrochimica Centro Srl', 'Perugia', ['FITO', 'CONC']],
-    ['Sementi Italia Centrale Spa', 'Bologna', ['SEME']],
-    ['Mangimificio Colle Alto Srl', 'Todi', ['MANG']],
-    ['Enoforniture Umbre Srl', 'Orvieto', ['ENOL']],
-    ['Casalinghi Distribuzione Srl', 'Roma', ['CASA']],
-    ['Sicurezza Lavoro Srl', 'Firenze', ['ANTI']],
+    ['VITERIA CENTRO ITALIA S.R.L.', 'Sig. Fabbri', 'Arezzo', 'AR', '52100', ['FERR']],
+    ['UTENSILERIA ADRIATICA S.R.L.', 'Ufficio ordini', 'Ancona', 'AN', '60131', ['UTEN']],
+    ['IDROTERMICA TIBERINA S.R.L.', 'Sig.ra Conti', 'Terni', 'TR', '05100', ['IDRA']],
+    ['ELETTROFORNITURE VALLE UMBRA S.R.L.', 'Sig. Moretti', 'Foligno', 'PG', '06034', ['ELET']],
+    ['COLORIFICIO APPENNINO S.N.C.', 'Sig. Galli', 'Gubbio', 'PG', '06024', ['VERN']],
+    ['VERDE ATTREZZATURE S.R.L.', 'Ufficio commerciale', 'Pistoia', 'PT', '51100', ['GIAR']],
+    ['IRRIGAZIONE MODERNA S.R.L.', 'Sig. Serra', 'Latina', 'LT', '04100', ['IRRI']],
+    ['AGROCHIMICA CENTRO S.R.L.', 'Dott. Leone', 'Perugia', 'PG', '06135', ['FITO', 'CONC']],
+    ['SEMENTI ITALIA CENTRALE S.P.A.', 'Ufficio vendite', 'Bologna', 'BO', '40138', ['SEME']],
+    ['MANGIMIFICIO COLLE ALTO S.R.L.', 'Sig. Testa', 'Todi', 'PG', '06059', ['MANG']],
+    ['ENOFORNITURE UMBRE S.R.L.', 'Sig.ra Neri', 'Orvieto', 'TR', '05018', ['ENOL']],
+    ['CASALINGHI DISTRIBUZIONE S.R.L.', 'Ufficio ordini', 'Roma', 'RM', '00155', ['CASA']],
+    ['SICUREZZA LAVORO S.R.L.', 'Sig. Monti', 'Firenze', 'FI', '50127', ['ANTI']],
   ];
 
   const AZIENDE = [
-    'Az. Agr. Colle dei Gelsi', 'Az. Agr. Le Due Querce', 'Soc. Agr. Valle Verde S.S.', 'Cantina Poggio Alto Srl',
-    'Frantoio Le Olivette Srl', 'Agriturismo Il Mulino Vecchio', 'Edil Costruzioni Martini Srl', 'Idraulica Fabbri & Figli Snc',
-    'Impianti Elettrici Moretti Snc', 'Giardini Conti di Conti Luca', 'Vivaio Fiori del Colle', 'Falegnameria Ricci Snc',
-    'Carpenteria Galli Srl', 'Az. Agr. San Martino', 'Coop. Agricola La Spiga', 'Allevamento La Fattoria Srl',
-    'Manutenzioni Verdi S.S.', 'Az. Agr. I Tre Ulivi',
+    'AZ. AGR. COLLE DEI GELSI', 'AZ. AGR. LE DUE QUERCE', 'SOC. AGR. VALLE VERDE S.S.', 'CANTINA POGGIO ALTO S.R.L.',
+    'FRANTOIO LE OLIVETTE S.R.L.', 'AGRITURISMO IL MULINO VECCHIO S.R.L.', 'EDIL COSTRUZIONI MARTINI S.R.L.', 'IDRAULICA FABBRI & FIGLI S.N.C.',
+    'IMPIANTI ELETTRICI MORETTI S.N.C.', 'VIVAIO FIORI DEL COLLE S.R.L.', 'FALEGNAMERIA RICCI S.N.C.',
+    'CARPENTERIA GALLI S.R.L.', 'AZ. AGR. SAN MARTINO S.S.', 'COOP. AGRICOLA LA SPIGA', 'ALLEVAMENTO LA FATTORIA S.R.L.',
+    'MANUTENZIONI VERDI S.S.', 'AZ. AGR. I TRE ULIVI S.S.',
   ];
-  const COGNOMI = ['Bianchi', 'Ferri', 'Conti', 'Marini', 'Galli', 'Costa', 'Fabbri', 'Moretti', 'Barbieri', 'Lombardi',
-    'Rinaldi', 'Mancini', 'Longo', 'Leone', 'Martinelli', 'Vitale', 'Serra', 'De Santis', 'Fiore', 'Pellegrini',
-    'Bruno', 'Gentile', 'Ricci', 'Ferrara', 'Silvestri', 'Testa', 'Benedetti', 'Orlando', 'Santoro', 'Mariani',
-    'Rizzi', 'Monti', 'Bellini', 'Neri', 'Sartori', 'Valentini', 'Grassi', 'Cecchini', 'Piccioni', 'Tosi'];
-  const NOMI = ['Mario', 'Giuseppe', 'Luigi', 'Franco', 'Paolo', 'Andrea', 'Marco', 'Stefano', 'Roberto', 'Giovanni',
-    'Anna', 'Maria', 'Laura', 'Paola', 'Giulia', 'Francesca', 'Elena', 'Rita', 'Sandro', 'Fabio',
-    'Matteo', 'Simone', 'Claudio', 'Sergio', 'Daniela', 'Silvia', 'Antonio', 'Alessandro', 'Carla', 'Enrico'];
-  const PAESI = [['Perugia', 'PG', '06121'], ['Foligno', 'PG', '06034'], ['Assisi', 'PG', '06081'], ['Spello', 'PG', '06038'],
-    ['Bevagna', 'PG', '06031'], ['Todi', 'PG', '06059'], ['Marsciano', 'PG', '06055'], ['Deruta', 'PG', '06053'],
-    ['Torgiano', 'PG', '06089'], ['Bastia Umbra', 'PG', '06083']];
-  const VIE = ['Via Roma', 'Via Garibaldi', 'Via dei Mille', 'Via della Stazione', 'Via San Francesco', 'Via dei Campi',
-    'Via Molino', 'Strada delle Vigne', 'Via del Lavoro', 'Via Mazzini', 'Via Cavour', 'Via delle Fonti'];
+  const COGNOMI = ['BIANCHI', 'FERRI', 'CONTI', 'MARINI', 'GALLI', 'COSTA', 'FABBRI', 'MORETTI', 'BARBIERI', 'LOMBARDI',
+    'RINALDI', 'MANCINI', 'LONGO', 'LEONE', 'MARTINELLI', 'VITALE', 'SERRA', 'DE SANTIS', 'FIORE', 'PELLEGRINI',
+    'BRUNO', 'GENTILE', 'RICCI', 'FERRARA', 'SILVESTRI', 'TESTA', 'BENEDETTI', 'ORLANDO', 'SANTORO', 'MARIANI',
+    'RIZZI', 'MONTI', 'BELLINI', 'NERI', 'SARTORI', 'VALENTINI', 'GRASSI', 'CECCHINI', 'PICCIONI', 'TOSI'];
+  const NOMI_M = ['MARIO', 'GIUSEPPE', 'LUIGI', 'FRANCO', 'PAOLO', 'ANDREA', 'MARCO', 'STEFANO', 'ROBERTO', 'GIOVANNI', 'SANDRO', 'FABIO', 'MATTEO', 'SIMONE', 'CLAUDIO', 'SERGIO', 'ANTONIO', 'ALESSANDRO', 'ENRICO'];
+  const NOMI_F = ['ANNA', 'MARIA', 'LAURA', 'PAOLA', 'GIULIA', 'FRANCESCA', 'ELENA', 'RITA', 'DANIELA', 'SILVIA', 'CARLA'];
+  const PAESI = [['PERUGIA', 'PG', '06121', 'G478'], ['FOLIGNO', 'PG', '06034', 'D653'], ['ASSISI', 'PG', '06081', 'A475'], ['SPELLO', 'PG', '06038', 'I888'],
+    ['BEVAGNA', 'PG', '06031', 'A832'], ['TODI', 'PG', '06059', 'L188'], ['MARSCIANO', 'PG', '06055', 'E975'], ['DERUTA', 'PG', '06053', 'D269'],
+    ['TORGIANO', 'PG', '06089', 'L216'], ['BASTIA UMBRA', 'PG', '06083', 'A710']];
+  const VIE = ['VIA ROMA', 'VIA GARIBALDI', 'VIA DEI MILLE', 'VIA DELLA STAZIONE', 'VIA SAN FRANCESCO', 'VIA DEI CAMPI',
+    'VIA MOLINO', 'STRADA DELLE VIGNE', 'VIA DEL LAVORO', 'VIA MAZZINI', 'VIA CAVOUR', 'VIA DELLE FONTI'];
 
-  // pagamenti come nel programma vero (giorni esatti dalla data della fattura)
-  const METODI = [
-    { id: 1, nome: 'Contanti', fe: 'MP01', giorni: 0 },
-    { id: 2, nome: 'Carta di pagamento', fe: 'MP08', giorni: 0 },
-    { id: 3, nome: 'Assegno', fe: 'MP02', giorni: 0 },
-    { id: 4, nome: 'Bonifico', fe: 'MP05', giorni: 0 },
-    { id: 5, nome: 'Bonifico 30gg fine mese', fe: 'MP05', giorni: 30 },
-    { id: 6, nome: 'Bonifico 60gg fine mese', fe: 'MP05', giorni: 60 },
-    { id: 7, nome: 'Bonifico 90gg fine mese', fe: 'MP05', giorni: 90 },
-    { id: 8, nome: 'Bonifico 120gg fine mese', fe: 'MP05', giorni: 120 },
-    { id: 9, nome: 'Riba 30gg fine mese', fe: 'MP12', giorni: 30 },
-    { id: 10, nome: 'Riba 60gg fine mese', fe: 'MP12', giorni: 60 },
-    { id: 11, nome: 'Riba 90gg fine mese', fe: 'MP12', giorni: 90 },
-    { id: 12, nome: 'Riba 120gg fine mese', fe: 'MP12', giorni: 120 },
-  ];
-
-  // stagionalita' (gen..dic) per gruppo di categorie
+  // stagionalità (gen..dic) per gruppo di categorie (per lo storico dell'Analisi)
   const STAGIONI = {
     agri: [0.55, 0.75, 1.25, 1.5, 1.5, 1.35, 1.1, 0.85, 1.05, 0.95, 0.7, 0.5],
     enol: [0.6, 0.5, 0.6, 0.6, 0.6, 0.7, 0.9, 1.4, 2.4, 1.9, 0.9, 0.6],
@@ -304,38 +328,43 @@
   const GRUPPO = { CONC: 'agri', FITO: 'agri', SEME: 'agri', IRRI: 'agri', GIAR: 'agri', ENOL: 'enol', VERN: 'vern' };
   const QUOTA = { FERR: 12, UTEN: 7, IDRA: 9, ELET: 5, VERN: 6, GIAR: 8, IRRI: 6, CONC: 12, FITO: 13, SEME: 4, MANG: 7, ENOL: 4, CASA: 3, ANTI: 4 };
   const QUOTA_DDT = { FITO: 0.55, CONC: 0.5, IRRI: 0.45, SEME: 0.4, MANG: 0.35, GIAR: 0.3 };
+  const ADR = 'UN 3077 MATERIA PERICOLOSA PER L\'AMBIENTE, SOLIDA, N.A.S., 9, III';
 
   // ---------- generatore ----------
   function genera(oggi, adesso) {
     const C = creaCaso(20261001);
-    const anno = daIso(oggi).getFullYear();
     const S = {
-      versione: 3, generatoIl: oggi, negozio: Object.assign({}, NEGOZIO),
-      metodi: METODI.map((m) => Object.assign({}, m)),
-      conti: [
-        { codice: 'CASSA', nome: 'Contanti', iniziale: 0 },
-        { codice: 'BANCA', nome: 'Banca c/c', iniziale: 0 },
-        { codice: 'POS', nome: 'POS / carte', iniziale: 0 },
-        { codice: 'ASSEGNI', nome: 'Assegni', iniziale: 0 },
-      ],
-      prossimo: {},
-      commercialista: { email: 'studio.contabile@example.it', attivo: true, invii: [] },
+      versione: 8, generatoIl: oggi, negozio: Object.assign({}, NEGOZIO, { piva: '0123456' + '054' + controlloPiva('0123456054') }),
+      operatori: OPERATORI.map((o) => Object.assign({}, o)),
+      metodi: METODI.map((m) => Object.assign({}, m)), causaliIva: CAUSALI_IVA.map((c) => Object.assign({}, c)),
+      aliquote: ALIQUOTE.map((a) => Object.assign({}, a)), conti: CONTI.map((c) => Object.assign({ iniziale: 0 }, c)),
+      numeri: {}, impostazioni: {
+        commercialista: 'studio.contabile@example.it', pecCasella: '', pecUtente: '', pecConfigurata: false,
+        bloccoMinuti: 15, ddtFitoStile: 'B', provvAgente: 'Agente di zona',
+      },
     };
+    S.negozio.cf = S.negozio.piva;
     let ultimoId = 1000;
     const nuovoId = () => ++ultimoId;
+    const annoOggi = daIso(oggi).getFullYear();
 
     // categorie
-    S.categorie = CATEGORIE.map((c, i) => ({ id: i + 1, codice: c[0], nome: c[1], iva: c[2], ricMin: c[3], ricMax: c[4], colore: c[5] }));
+    S.categorie = CATEGORIE.map((c, i) => ({ id: i + 1, codice: c[0], descr: c[1], iva: c[2], ricMin: c[3], ricMax: c[4] }));
     const catPer = {}; S.categorie.forEach((c) => { catPer[c.codice] = c; });
 
-    // fornitori
-    S.fornitori = FORNITORI.map((f, i) => ({
-      id: i + 1, codice: 'F' + pad(i + 1) + '0', nome: f[0], citta: f[1], cat: f[2],
-      piva: partitaIva(C), tel: '0' + C.intero(71, 75) + ' ' + C.intero(100000, 999999),
-      email: 'ordini@' + f[0].toLowerCase().replace(/[^a-z]/g, '').slice(0, 14) + '.example',
-      pagamento: C.scegli(['Bonifico 60gg fine mese', 'Riba 60gg fine mese', 'Riba 90gg fine mese', 'Bonifico 30gg fine mese']),
-    }));
+    // fornitori (più qualcuno «DA COMPLETARE», come quelli nati dall'importazione del vecchio archivio)
+    S.fornitori = FORNITORI.map((f, i) => {
+      const slug = f[0].toLowerCase().replace(/ (s\.r\.l\.|s\.n\.c\.|s\.p\.a\.)$/, '').replace(/[^a-z]/g, '').slice(0, 16);
+      return {
+        id: i + 1, codice: 'F' + String(i + 1).padStart(3, '0'), nome: f[0], referente: f[1], indirizzo: C.scegli(VIE).replace(/^VIA/, 'Via').replace(/^STRADA/, 'Strada') + ' ' + C.intero(1, 90),
+        citta: f[2].toUpperCase(), prov: f[3], cap: f[4], cat: f[5], piva: partitaIva(C), tel: '0' + C.intero(55, 75) + ' ' + C.intero(100000, 999999),
+        email: 'ordini@' + slug + '.example', pec: slug + '@pec.example', iban: 'IT' + C.intero(10, 99) + ' X' + C.intero(1000, 9999) + ' ' + C.intero(1000, 9999) + ' ' + C.intero(1000, 9999) + ' ' + C.intero(100000, 999999),
+        cond: C.scegli(['Bonifico 60gg fine mese', 'Riba 60gg fine mese', 'Riba 90gg fine mese', 'Bonifico 30gg fine mese', 'RID']),
+      };
+    });
+    [14, 27, 31, 46].forEach((n, i) => S.fornitori.push({ id: 14 + i, codice: String(n), nome: 'DA COMPLETARE (' + n + ')', referente: '', indirizzo: '', citta: '', prov: '', cap: '', cat: [], piva: '', tel: '', email: '', pec: '', iban: '', cond: '' }));
     const fornPer = {}; S.fornitori.forEach((f) => f.cat.forEach((c) => { if (!fornPer[c]) fornPer[c] = f.id; }));
+    const daCompletare = S.fornitori.filter((f) => f.nome.startsWith('DA COMPLETARE'));
 
     // articoli
     S.articoli = [];
@@ -347,93 +376,102 @@
           progr[cat.codice] = (progr[cat.codice] || 0) + C.intero(3, 19);
           const t = varianti.length > 1 ? i / (varianti.length - 1) : C.r();
           const costo = r2((m[2] + (m[3] - m[2]) * t) * C.tra(0.92, 1.08));
-          let ric = Math.round(C.tra(cat.ricMin, cat.ricMax));
+          const ricA = Math.round(C.tra(cat.ricMin, cat.ricMax));
+          const ricB = Math.max(10, ricA - C.intero(8, 12)), ricC = Math.max(8, ricA - C.intero(18, 24));
           const iva = (cat.codice === 'GIAR' && m[0].startsWith('TERRICCIO')) ? 10 : cat.iva;
           const prezzo = (r) => prezzoBello(costo * (1 + r / 100) * (1 + iva / 100), C);
+          const forn = C.prob(0.08) ? C.scegli(daCompletare).id : fornPer[cat.codice];
           const a = {
             id: nuovoId(), codice: cat.codice + String(progr[cat.codice]).padStart(4, '0'),
-            barcode: C.prob(0.55) ? ean13(C) : '',
-            descr: m[0].replace('{v}', v || ''), cat: cat.id, um: m[1], iva, costo,
-            prezzoA: prezzo(ric), prezzoB: prezzo(Math.max(10, ric - C.intero(8, 12))), prezzoC: prezzo(Math.max(8, ric - C.intero(18, 24))),
-            giac: C.intero(0, m[4]), scortaMin: 0, forn: fornPer[cat.codice],
-            ultimoAcq: piuGiorni(oggi, -C.intero(3, 220)), lotto: '', scadenza: '', fito: cat.codice === 'FITO', nReg: '',
+            barcode: C.prob(0.55) ? ean13(C) : '', descr: m[0].replace('{v}', v || ''), cat: cat.id, um: m[1], iva, costo,
+            prezzoA: prezzo(ricA), prezzoB: prezzo(ricB), prezzoC: prezzo(ricC), ricA, ricB, ricC,
+            giac: C.intero(0, m[4]), scortaMin: 0, forn, codForn: C.prob(0.7) ? String(C.intero(10000, 99999)) : '',
+            dataAcq: piuGiorni(oggi, -C.intero(3, 220)), lotto: '', scadenza: '', fito: cat.codice === 'FITO', info: '', nReg: '',
           };
+          // nella scheda il ricarico è quello del prezzo arrotondato (come li scrive il negozio)
+          const ricVero = (p) => Math.round((p / (1 + iva / 100) / costo - 1) * 100);
+          a.ricA = ricVero(a.prezzoA); a.ricB = ricVero(a.prezzoB); a.ricC = ricVero(a.prezzoC);
           a.scortaMin = C.prob(0.6) ? Math.max(1, Math.round(m[4] * C.tra(0.1, 0.25))) : 0;
           if (a.scortaMin) a.giac = C.intero(a.scortaMin, Math.max(a.scortaMin, m[4]));
           if (cat.codice === 'FITO') {
-            a.nReg = C.intero(10000, 17999) + ' del ' + piuGiorni(oggi, -C.intero(900, 6000)).split('-').reverse().join('/');
+            a.nReg = C.intero(10000, 17999) + ' DEL ' + piuGiorni(oggi, -C.intero(900, 6000)).split('-').reverse().join('/');
+            a.produttore = C.scegli(['AGROSAN S.P.A.', 'FITOVERDE S.R.L.', 'CHIMICA AGRARIA ITALIA', 'BIOPROTEZIONE S.R.L.', 'AGRIDIFESA S.P.A.']);
             a.lotto = 'L' + C.intero(2400, 2699) + '-' + C.intero(10, 99);
-            a.scadenza = piuGiorni(oggi, C.intero(200, 1100));
+            if (C.prob(0.6)) a.info = ADR;
           }
-          if (cat.codice === 'ENOL' && C.prob(0.6)) {
-            a.lotto = 'E' + C.intero(100, 999);
-            a.scadenza = piuGiorni(oggi, C.intero(60, 700));
-          }
+          if (cat.codice === 'ENOL' && C.prob(0.75)) { a.lotto = 'E' + C.intero(100, 999); a.scadenza = piuGiorni(oggi, C.intero(60, 700)); }
           S.articoli.push(a);
         });
       }
     }
-    // qualche situazione da tenere d'occhio: sotto scorta e venduti sottocosto
+    // qualche situazione da tenere d'occhio: sotto scorta, venduti sottocosto, ricarico della scheda che non torna
     C.mescola(S.articoli).slice(0, 18).forEach((a) => { if (!a.scortaMin) a.scortaMin = C.intero(3, 8); a.giac = C.intero(0, a.scortaMin - 1); });
     C.mescola(S.articoli.filter((a) => a.prezzoA > 3)).slice(0, 6).forEach((a) => { a.costo = r2(a.prezzoA / (1 + a.iva / 100) * C.tra(1.04, 1.18)); });
-    const artPer = {}; S.articoli.forEach((a) => { artPer[a.id] = a; });
+    C.mescola(S.articoli).slice(0, 9).forEach((a) => { a.ricA = a.ricA + C.intero(6, 14); });
     const artDiCat = (cod) => S.articoli.filter((a) => a.cat === catPer[cod].id);
 
-    // clienti
+    // clienti: aziende, ditte con partita IVA e privati, con codici fiscali e partite IVA validi
     S.clienti = [];
     let nCli = 1;
     const indirizzo = () => C.scegli(VIE) + ' ' + C.intero(1, 140);
+    const persona = () => { const f = C.prob(0.35); return { cognome: C.scegli(COGNOMI), nome: C.scegli(f ? NOMI_F : NOMI_M), f }; };
+    const cfPer = (p, paese) => codiceFiscale(p.cognome, p.nome, C.intero(1940, 1999), C.intero(1, 12), C.intero(1, 28), p.f, paese[3]);
     AZIENDE.forEach((nome) => {
       const p = C.scegli(PAESI);
-      const slug = nome.toLowerCase().replace(/^(az\. agr\.|soc\. agr\.|coop\. agricola) /, '').replace(/[^a-z]/g, '').slice(0, 16);
+      const slug = nome.toLowerCase().replace(/^(az\. agr\.|soc\. agr\.|coop\. agricola) /, '').replace(/ (s\.r\.l\.|s\.n\.c\.|s\.s\.)$/, '').replace(/[^a-z]/g, '').slice(0, 16);
+      const piva = partitaIva(C);
       S.clienti.push({
-        id: nuovoId(), codice: 'C' + String(nCli++).padStart(4, '0'), tipo: 'PG', nome, indirizzo: indirizzo(),
-        citta: p[0], prov: p[1], cap: p[2], piva: partitaIva(C), cf: '', tel: '07' + C.intero(42, 59) + ' ' + C.intero(100000, 999999),
-        email: 'amministrazione@' + slug + '.example', pec: slug + '@pec.example', sdi: C.prob(0.6) ? 'M5UXCR1' : '0000000',
+        id: nuovoId(), codice: String(nCli++), tipoSogg: 'SOCIETA', nome, indirizzo: indirizzo(), citta: p[0], prov: p[1], cap: p[2],
+        piva, cf: piva, tel: '07' + C.intero(42, 59) + ' ' + C.intero(100000, 999999), cell: C.prob(0.5) ? '3' + C.intero(20, 49) + ' ' + C.intero(1000000, 9999999) : '',
+        email: 'amministrazione@' + slug + '.example', email2: '', pec: slug + '@pec.example', sdi: C.prob(0.6) ? 'M5UXCR1' : '0000000',
         listino: C.scegli(['A', 'B', 'B', 'C']),
-        pagamento: C.scegli(['Riba 60gg fine mese', 'Riba 90gg fine mese', 'Bonifico 30gg fine mese', 'Riba 30gg fine mese', 'Bonifico 60gg fine mese']),
+        pagTesto: C.scegli(['Riba 60gg fine mese', 'Riba 90gg fine mese', 'Bonifico 30gg fine mese', 'Riba 30gg fine mese', 'Bonifico 60gg fine mese']),
       });
     });
+    S.clienti.push({ id: nuovoId(), codice: String(nCli++), tipoSogg: 'PA', nome: 'COMUNE DI SAN TERENZIANO', indirizzo: 'PIAZZA DEL MUNICIPIO 1', citta: 'TODI', prov: 'PG', cap: '06059', piva: partitaIva(C), cf: '', tel: '075 000 0101', cell: '', email: 'protocollo@comune.example', email2: '', pec: 'comune@pec.example', sdi: 'UFX4K2', listino: 'B', pagTesto: 'Bonifico 30gg fine mese' });
+    S.clienti[S.clienti.length - 1].cf = S.clienti[S.clienti.length - 1].piva;
     const usati = new Set();
-    while (S.clienti.length < 70) {
-      const nome = C.scegli(COGNOMI) + ' ' + C.scegli(NOMI);
+    while (S.clienti.length < 72) {
+      const pe = persona();
+      const nome = pe.cognome + ' ' + pe.nome;
       if (usati.has(nome)) continue;
       usati.add(nome);
       const p = C.scegli(PAESI);
       const conPiva = C.prob(0.25);   // artigiani e agricoltori con partita IVA
       S.clienti.push({
-        id: nuovoId(), codice: 'C' + String(nCli++).padStart(4, '0'), tipo: conPiva ? 'DI' : 'PF', nome: nome.toUpperCase(),
-        indirizzo: indirizzo(), citta: p[0], prov: p[1], cap: p[2],
-        piva: conPiva ? partitaIva(C) : '',
-        cf: nome.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 6).padEnd(6, 'X') + C.intero(40, 99) + C.scegli(['A', 'B', 'C', 'D', 'E', 'H', 'L', 'M', 'P', 'R', 'S', 'T']) + pad(C.intero(1, 28)) + 'G478X',
-        tel: '3' + C.intero(20, 49) + ' ' + C.intero(1000000, 9999999), email: C.prob(0.6) ? nome.toLowerCase().replace(' ', '.') + '@email.example' : '',
-        pec: '', sdi: '0000000', listino: C.prob(0.85) ? 'A' : 'B',
-        pagamento: C.scegli(['Contanti', 'Contanti', 'Assegno', 'Bonifico']),
+        id: nuovoId(), codice: String(nCli++), tipoSogg: conPiva ? 'DITTA' : 'PRIVATO', nome, nomeP: pe,
+        indirizzo: indirizzo(), citta: p[0], prov: p[1], cap: p[2], piva: conPiva ? partitaIva(C) : '', cf: cfPer(pe, p),
+        tel: C.prob(0.4) ? '07' + C.intero(42, 59) + ' ' + C.intero(100000, 999999) : '', cell: '3' + C.intero(20, 49) + ' ' + C.intero(1000000, 9999999),
+        email: C.prob(0.6) ? (pe.nome + '.' + pe.cognome.replace(/ /g, '')).toLowerCase() + '@email.example' : '', email2: '',
+        pec: '', sdi: conPiva ? '0000000' : '', listino: C.prob(0.85) ? 'A' : 'B',
+        pagTesto: conPiva ? C.scegli(['Rimessa diretta', 'Bonifico 30gg fine mese', '']) : '',
       });
     }
+    S.clienti.forEach((c) => { delete c.nomeP; });
     const cliPer = {}; S.clienti.forEach((c) => { cliPer[c.id] = c; });
-    const aziende = S.clienti.filter((c) => c.tipo !== 'PF');
+    const aziende = S.clienti.filter((c) => c.tipoSogg !== 'PRIVATO' && c.tipoSogg !== 'PA');
 
     // patentini per i fitosanitari: un quarto scaduti, qualcuno in scadenza
     S.patentini = [];
-    const titolari = C.mescola(S.clienti).slice(0, 42);
-    titolari.forEach((c, i) => {
+    C.mescola(S.clienti.filter((c) => c.tipoSogg !== 'PA')).slice(0, 44).forEach((c, i) => {
       const scade = i < 11 ? piuGiorni(oggi, -C.intero(20, 900)) : i < 16 ? piuGiorni(oggi, C.intero(5, 58)) : piuGiorni(oggi, C.intero(90, 1700));
+      const titolare = c.tipoSogg === 'SOCIETA' ? (C.scegli(COGNOMI) + ' ' + C.scegli(NOMI_M)) : c.nome;
       S.patentini.push({
-        id: nuovoId(), numero: String(C.intero(2100, 16999)),
-        nominativo: c.tipo === 'PG' ? (C.scegli(COGNOMI) + ' ' + C.scegli(NOMI)).toUpperCase() : c.nome,
-        clienteId: c.id, rilascio: piuGiorni(scade, -1826), scadenza: scade,
+        id: nuovoId(), numero: String(C.intero(2100, 16999)), nominativo: titolare, indirizzo: c.indirizzo + ' - ' + c.citta,
+        ente: 'REGIONE UMBRIA', rilascio: piuGiorni(scade, -1826), validoDa: piuGiorni(scade, -1826), validoA: scade, clienteId: c.id,
       });
     });
 
-    // ---------- vendite al banco: gli ultimi giorni, scontrino per scontrino ----------
-    S.scontrini = [];
+    // ---------- vendite al banco: gli ultimi 35 giorni, scontrino per scontrino ----------
+    S.scontrini = []; S.chiusure = [];
     let nSc = 2300 + C.intero(0, 200);
+    let nRt = 1400 + C.intero(0, 100), nZ = 180 + C.intero(0, 40);
     const pesoBanco = { FERR: 6, IDRA: 4, ELET: 4, CASA: 3, VERN: 3, GIAR: 3, UTEN: 2, ANTI: 2, SEME: 2, MANG: 2, CONC: 1, FITO: 0, IRRI: 1, ENOL: 1 };
     const vasoBanco = [];
     for (const cat of S.categorie) for (const a of artDiCat(cat.codice)) for (let k = 0; k < (pesoBanco[cat.codice] || 0); k++) vasoBanco.push(a);
     const oraAdesso = adesso.getHours() + adesso.getMinutes() / 60;
-    for (let g = 9; g >= 0; g--) {
+    const nomiOp = ['GIORGIO ROSSI', 'ANNA ROSSI', 'MATTEO BIANCHI'];
+    for (let g = 35; g >= 0; g--) {
       const giorno = piuGiorni(oggi, -g);
       const dow = daIso(giorno).getDay();
       if (dow === 0) continue;
@@ -446,25 +484,33 @@
         if (dow !== 6 && h > 12.75 && h < 15.5) h = 15.5 + (h - 12.75) * 0.4;
         orari.push(h);
       }
-      orari.sort((a, b) => a - b).forEach((h) => {
+      let totGiorno = 0, nGiorno = 0;
+      orari.sort((a, b) => a - b).forEach((h, idx) => {
         const righe = [];
         const nr = C.prob(0.55) ? 1 : C.intero(2, 4);
         for (let k = 0; k < nr; k++) {
           const a = C.scegli(vasoBanco);
           if (righe.some((r) => r.artId === a.id)) continue;
           const qta = a.um === 'MT' ? C.intero(2, 25) : a.um === 'KG' ? C.intero(1, 3) : C.prob(0.75) ? 1 : C.intero(2, 4);
-          righe.push({ artId: a.id, codice: a.codice, descr: a.descr, qta, prezzo: a.prezzoA, sconto: 0, iva: a.iva });
+          righe.push({ artId: a.id, codice: a.codice, descr: a.descr, qta, prezzo: a.prezzoA, sconto: 0, iva: a.iva, listino: 'A' });
         }
         const tot = r2(righe.reduce((s, r) => s + r.qta * r.prezzo, 0));
-        const minuti = Math.round((h % 1) * 60);
+        const minuti = Math.floor((h % 1) * 60), secondi = C.intero(0, 59);
         const pag = C.prob(0.6) ? 1 : 2;
-        S.scontrini.push({
-          id: nuovoId(), numero: ++nSc, data: giorno + 'T' + pad(Math.floor(h)) + ':' + pad(minuti) + ':00',
-          clienteId: C.prob(0.12) ? C.scegli(S.clienti).id : null, metodoId: pag, righe, totale: tot, rt: nSc - 1200,
-        });
+        // un paio di scontrini battuti per sbaglio dal computer dell'ufficio (simulazione, in rosso)
+        const sim = g === 4 && idx === 3;
+        const sc = {
+          id: nuovoId(), numero: ++nSc, data: giorno + 'T' + pad(Math.floor(h)) + ':' + pad(minuti) + ':' + pad(secondi),
+          clienteId: C.prob(0.12) ? C.scegli(S.clienti).id : null, metodoId: pag, righe, totale: tot,
+          postazione: sim ? 'UFFICIO-PC' : 'CASSA-PC', esito: sim ? 'SIMULAZIONE: cassa non collegata' : 'EMESSO (cassa n. ' + (++nRt) + ')',
+          operatore: sim ? 'GIORGIO ROSSI' : C.scegli(nomiOp),
+        };
+        S.scontrini.push(sc);
+        if (!sim) { totGiorno += tot; nGiorno++; }
       });
+      if (g > 0) S.chiusure.push({ data: giorno, numero: ++nZ, scontrini: nGiorno, totale: r2(totGiorno) });
     }
-    S.prossimo.scontrino = nSc + 1;
+    S.numeri.scontrino = nSc; S.numeri.rt = nRt; S.numeri.z = nZ;
 
     // ---------- DDT, fatture e scadenze ----------
     S.ddt = []; S.fatture = []; S.scadenze = [];
@@ -479,46 +525,32 @@
         if (out.some((r) => r.artId === a.id)) continue;
         const qta = a.um === 'SC' ? C.intero(2, 12) : a.um === 'MT' ? C.intero(10, 100) : C.intero(1, 6);
         const prezzo = listino === 'C' ? a.prezzoC : listino === 'B' ? a.prezzoB : a.prezzoA;
-        out.push({ artId: a.id, codice: a.codice, descr: a.descr, um: a.um, qta, prezzo, sconto: 0, iva: a.iva });
+        out.push({ artId: a.id, codice: a.codice, descr: a.descr, um: a.um, qta, prezzo, sconto: 0, iva: a.iva, listino: listino || 'A' });
       }
       return out;
     };
     const totali = (righe) => {
       let imp = 0, iva = 0;
       const perAliq = {};
-      righe.forEach((r) => {
-        const lordo = r.qta * r.prezzo * (1 - (r.sconto || 0) / 100);
-        perAliq[r.iva] = (perAliq[r.iva] || 0) + lordo;
-      });
-      Object.keys(perAliq).forEach((k) => {
-        const lordo = r2(perAliq[k]);
-        const netto = r2(lordo / (1 + Number(k) / 100));
-        imp += netto; iva += r2(lordo - netto);
-      });
+      righe.forEach((r) => { perAliq[r.iva] = (perAliq[r.iva] || 0) + r.qta * r.prezzo * (1 - (r.sconto || 0) / 100); });
+      Object.keys(perAliq).forEach((k) => { const lordo = r2(perAliq[k]); const netto = r2(lordo / (1 + Number(k) / 100)); imp += netto; iva += r2(lordo - netto); });
       return { imponibile: r2(imp), iva: r2(iva), totale: r2(imp + iva) };
     };
-    S.totali = null; // calcolato dall'app
-
     const meseOggi = oggi.slice(0, 7);
     const giornoOggi = daIso(oggi).getDate();
-    let nDdt = 0, prog = 9930;
     const mesi = [];
     for (let k = 3; k >= 0; k--) { const d = daIso(oggi); d.setDate(1); d.setMonth(d.getMonth() - k); mesi.push(iso(d).slice(0, 7)); }
     const metodoPer = (nome) => S.metodi.find((m) => m.nome === nome) || S.metodi[0];
     const mesePrecedente = mesi[mesi.length - 2];
     // numerazioni dell'anno: si parte come se il negozio lavorasse da gennaio
-    // (solo per l'anno del primo mese generato; l'anno dopo riparte da 1)
     const annoPrimo = Number(mesi[0].slice(0, 4));
     const mesiPrima = Number(mesi[0].slice(5, 7)) - 1;
     const base = (y, perMese) => (y === annoPrimo ? mesiPrima * perMese : 0);
-    nDdt = base(annoPrimo, 34);
-    let annoNum = annoPrimo;
-
+    let nDdt = base(annoPrimo, 34), annoNum = annoPrimo;
     for (const mese of mesi) {
       if (Number(mese.slice(0, 4)) !== annoNum) { annoNum = Number(mese.slice(0, 4)); nDdt = 0; }
       const corrente = mese === meseOggi;
       const ultimo = corrente ? giornoOggi : daIso(fineMese(mese + '-01')).getDate();
-      // DDT del mese per i clienti "a fine mese"
       const ddtMese = [];
       clientiDdt.forEach((cli) => {
         const quanti = corrente ? (C.prob(0.75) ? C.intero(1, 3) : 0) : C.intero(1, 5);
@@ -526,16 +558,13 @@
           const g = C.intero(1, ultimo);
           const righe = righeDoc(C.intero(2, 6), cli.listino);
           if (!righe.length) continue;
-          const t = totali(righe);
-          ddtMese.push({ id: nuovoId(), numero: 0, data: mese + '-' + pad(g), clienteId: cli.id, causale: 'Vendita', righe, totale: t.totale, fatturaId: null });
+          ddtMese.push({ id: nuovoId(), numero: 0, data: mese + '-' + pad(g), clienteId: cli.id, causale: 'VENDITA', righe, totale: totali(righe).totale, fatturaId: null, annullato: false, note: '' });
         }
       });
-      // almeno qualche DDT aperto nel mese in corso, per mostrare la fattura da DDT
       if (corrente && ddtMese.length < 6) {
         clientiDdt.slice(0, 4).forEach((cli) => {
           const righe = righeDoc(C.intero(2, 5), cli.listino);
-          const t = totali(righe);
-          ddtMese.push({ id: nuovoId(), numero: 0, data: mese + '-' + pad(C.intero(1, ultimo)), clienteId: cli.id, causale: 'Vendita', righe, totale: t.totale, fatturaId: null });
+          ddtMese.push({ id: nuovoId(), numero: 0, data: mese + '-' + pad(C.intero(1, ultimo)), clienteId: cli.id, causale: 'VENDITA', righe, totale: totali(righe).totale, fatturaId: null, annullato: false, note: '' });
         });
       }
       ddtMese.sort((a, b) => a.data.localeCompare(b.data));
@@ -545,14 +574,13 @@
       const nAcc = corrente ? Math.min(3, C.intero(1, 3)) : C.intero(3, 6);
       for (let k = 0; k < nAcc; k++) {
         const cli = C.scegli(aziende);
-        const g = C.intero(1, ultimo);
         const righe = righeDoc(C.intero(1, 4), cli.listino);
         if (!righe.length) continue;
         const t = totali(righe);
         S.fatture.push({
-          id: nuovoId(), tipo: 'FAC', numero: 0, anno: annoNum, data: mese + '-' + pad(g), clienteId: cli.id, righe,
-          imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId: metodoPer(cli.pagamento).id, pagamentoTesto: '',
-          ddtIds: [], sdi: 'GENERATO', mail: '', progressivo: '', causale: 'Vendita',
+          id: nuovoId(), tipo: 'FAC', numero: 0, anno: annoNum, data: mese + '-' + pad(C.intero(1, ultimo)), clienteId: cli.id, righe,
+          imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId: metodoPer(cli.pagTesto).id, pagTesto: '',
+          ddtIds: [], sdi: 'GENERATO', mail: '', progressivo: '', causaleIvaId: 1, note: C.prob(0.4) ? 'CIG Z' + C.intero(1000000, 9999999) + 'A' : '',
         });
       }
       // fatture differite di fine mese (dal riepilogo dei DDT) per i mesi chiusi
@@ -565,98 +593,134 @@
           const t = totali(righe);
           const f = {
             id: nuovoId(), tipo: 'FT', numero: 0, anno: annoNum, data: fine, clienteId: cli.id, righe,
-            imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId: metodoPer(cli.pagamento).id, pagamentoTesto: '',
-            ddtIds: suoi.map((d) => d.id), sdi: 'GENERATO', mail: '', progressivo: '',
-            causale: 'Fattura differita — DDT ' + suoi.map((d) => d.numero + ' del ' + d.data.split('-').reverse().join('/')).join(', '),
+            imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId: null, pagTesto: cli.pagTesto,
+            ddtIds: suoi.map((d) => d.id), sdi: 'GENERATO', mail: '', progressivo: '', causaleIvaId: 1, note: '',
           };
-          if (f.causale.length > 200) f.causale = 'Fattura differita — ' + suoi.length + ' DDT del mese';
+          const mp = metodoPer(cli.pagTesto); if (mp && mp.nome === cli.pagTesto) f.metodoId = mp.id;
           suoi.forEach((d) => { d.fatturaId = f.id; });
           S.fatture.push(f);
         });
       }
     }
+    // una nota di credito su una fattura vecchia
+    const daStornare = S.fatture.find((f) => f.tipo === 'FAC' && f.data.slice(0, 7) === mesi[1]);
+    if (daStornare) {
+      const r0 = Object.assign({}, daStornare.righe[0], { qta: 1 });
+      const t = totali([r0]);
+      S.fatture.push({ id: nuovoId(), tipo: 'NC', numero: 0, anno: daStornare.anno, data: piuGiorni(daStornare.data, 6), clienteId: daStornare.clienteId, righe: [r0], imponibile: t.imponibile, iva: t.iva, totale: t.totale, metodoId: daStornare.metodoId, pagTesto: '', ddtIds: [], sdi: 'GENERATO', mail: '', progressivo: '', causaleIvaId: 1, note: 'Reso merce non conforme', origineId: daStornare.id });
+    }
     // numeri e stati SDI in ordine di data
     S.fatture.sort((a, b) => (a.data + a.tipo).localeCompare(b.data + b.tipo));
     const contaAnno = {};
+    let prog = 9930;
     S.fatture.forEach((f) => {
       const k = f.tipo + f.anno;
-      if (contaAnno[k] === undefined) contaAnno[k] = base(f.anno, f.tipo === 'FT' ? 12 : 4);
+      if (contaAnno[k] === undefined) contaAnno[k] = base(f.anno, f.tipo === 'FT' ? 12 : f.tipo === 'FAC' ? 4 : 0);
       f.numero = ++contaAnno[k];
       f.progressivo = String(++prog).padStart(5, '0');
       const mese = f.data.slice(0, 7);
-      if (mese < mesePrecedente) { f.sdi = C.prob(0.85) ? 'ACCETTATO' : 'CONSEGNATO'; f.mail = C.prob(0.7) ? 'INVIATA' : ''; }
-      else if (mese === mesePrecedente) { f.sdi = giornoOggi > 10 ? 'CONSEGNATO' : 'GENERATO'; f.mail = giornoOggi > 10 && C.prob(0.6) ? 'INVIATA' : ''; }
-      else f.sdi = 'GENERATO';
+      // fra privati l'ultima ricevuta dello SDI è la consegna: «accettata» c'è solo con la Pubblica Amministrazione
+      if (mese < mesePrecedente) { const acc = C.prob(0.85); f.sdi = acc && cliPer[f.clienteId].tipoSogg === 'PA' ? 'ACCETTATO' : 'CONSEGNATO'; f.mail = C.prob(0.7) ? 'INVIATA' : ''; }
+      else if (mese === mesePrecedente) { f.sdi = giornoOggi > 10 ? 'CONSEGNATO' : 'INVIATO'; f.mail = giornoOggi > 10 && C.prob(0.6) ? 'INVIATA' : ''; }
+      else f.sdi = C.prob(0.5) ? 'GENERATO' : 'CONSEGNATO';
+      if (f.sdi !== 'GENERATO') f.inviatoIl = piuGiorni(f.data, C.intero(0, 2));
     });
     // uno scarto dello SDI da sistemare, per mostrare come si gestisce
-    const vecchie = S.fatture.filter((f) => f.data.slice(0, 7) < mesePrecedente);
-    if (vecchie.length) { const sc = vecchie[vecchie.length - 1]; sc.sdi = 'SCARTATO'; sc.scarto = '00305 · IdFiscaleIVA del cessionario non valido'; }
-    S.prossimo.ft = contaAnno['FT' + anno] || 0;
-    S.prossimo.fac = contaAnno['FAC' + anno] || 0;
-    S.prossimo.ddt = nDdt;
-    S.prossimo.progressivo = prog;
+    const vecchie = S.fatture.filter((f) => f.tipo !== 'NC' && f.data.slice(0, 7) < mesePrecedente);
+    if (vecchie.length) {
+      const sc = vecchie[vecchie.length - 1];
+      sc.sdi = 'SCARTATO'; sc.scartoIl = piuGiorni(sc.data, 1); sc.inviatoIl = sc.data;
+      // il codice destinatario del cliente è stato scritto con un carattere in meno: lo SDI non sa a chi recapitarla
+      // (testo come lo salva il programma: «codice: descrizione», più errori separati da «|»)
+      const cl = cliPer[sc.clienteId];
+      cl.sdi = (cl.sdi && cl.sdi !== '0000000' ? cl.sdi : 'M5UXCR1').slice(0, 6);
+      sc.scarto = '00311: 1.1.4 <CodiceDestinatario> non valido';
+    }
+    S.numeri.ddt = nDdt;
+    S.numeri.ft = contaAnno['FT' + annoOggi] || 0; S.numeri.fac = contaAnno['FAC' + annoOggi] || 0; S.numeri.nc = contaAnno['NC' + annoOggi] || 0;
+    S.numeri.progressivo = prog; S.numeri.preventivo = C.intero(40, 90);
 
+    // provvigioni dell'agente: sulle fatture di alcuni clienti, riga per riga (la % la scrive il negozio)
+    const conAgente = new Set(C.mescola(aziende).slice(0, 8).map((c) => c.id));
+    S.fatture.forEach((f) => { if (conAgente.has(f.clienteId)) f.righe.forEach((r) => { r.provv = C.scegli([3, 3, 4, 5]); }); });
+    S.scontrini.forEach((sc) => sc.righe.forEach((r) => { if (C.prob(0.04)) r.provv = 2; }));
     // scadenze dei clienti: giorni esatti dalla data della fattura
-    S.fatture.forEach((f) => {
+    const scadenzaFattura = (f) => {
       const m = S.metodi.find((x) => x.id === f.metodoId);
-      const scad = piuGiorni(f.data, m ? m.giorni : 30);
-      const s = {
-        id: nuovoId(), tipo: 'ATTIVA', soggettoId: f.clienteId, fatturaId: f.id,
-        documento: (f.tipo === 'FAC' ? 'FAC ' : '') + f.numero, dataDoc: f.data, scadenza: scad,
-        importo: f.totale, pagato: 0, stato: 'APERTA', metodoId: f.metodoId,
-      };
-      if (scad < piuGiorni(oggi, -5) && C.prob(0.78)) { s.pagato = s.importo; s.stato = 'PAGATA'; s.incassoIl = piuGiorni(scad, C.intero(-3, 6)); }
-      else if (scad < oggi && C.prob(0.25)) { s.pagato = r2(s.importo * C.tra(0.3, 0.6)); s.stato = 'PARZIALE'; s.incassoIl = piuGiorni(scad, C.intero(0, 8)); }
+      const gg = m ? m.giorni : /rimessa|contant/i.test(f.pagTesto || '') ? 0 : ((f.pagTesto || '').match(/(\d{2,3})\s*gg/) || [0, 30])[1];
+      return piuGiorni(f.data, Number(gg));
+    };
+    S.fatture.filter((f) => f.tipo !== 'NC').forEach((f) => {
+      const scad = scadenzaFattura(f);
+      const m = S.metodi.find((x) => x.id === f.metodoId);
+      const s = { id: nuovoId(), tipo: 'ATTIVA', soggettoId: f.clienteId, fatturaId: f.id, documento: String(f.numero), dataDoc: f.data, scadenza: scad, importo: f.totale, stato: 'APERTA', metodo: m ? m.nome : (f.pagTesto || ''), conto: '', note: '', incassi: [] };
+      if (scad < piuGiorni(oggi, -5) && C.prob(0.78)) s.incassi.push({ id: nuovoId(), data: piuGiorni(scad, C.intero(-3, 6)), importo: s.importo, conto: m && m.fe === 'MP01' ? 'CASSA' : 'BANCA', tipo: 'INCASSO', note: '', operatore: C.scegli(nomiOp) });
+      else if (scad < oggi && C.prob(0.25)) s.incassi.push({ id: nuovoId(), data: piuGiorni(scad, C.intero(0, 8)), importo: r2(s.importo * C.tra(0.3, 0.6)), conto: 'BANCA', tipo: 'ACCONTO', note: '', operatore: C.scegli(nomiOp) });
       S.scadenze.push(s);
     });
-    // vecchie partite rimaste aperte dagli anni scorsi
+    // vecchie partite rimaste aperte dagli anni scorsi (dal vecchio programma)
     for (let k = 0; k < 9; k++) {
       const cli = C.scegli(S.clienti);
       const data = piuGiorni(oggi, -C.intero(200, 900));
-      S.scadenze.push({
-        id: nuovoId(), tipo: 'ATTIVA', soggettoId: cli.id, fatturaId: null, documento: String(C.intero(80, 480)),
-        dataDoc: data, scadenza: data, importo: r2(C.tra(40, 900)), pagato: 0, stato: 'APERTA', metodoId: 1,
-      });
+      S.scadenze.push({ id: nuovoId(), tipo: 'ATTIVA', soggettoId: cli.id, fatturaId: null, documento: String(C.intero(80, 480)), dataDoc: data, scadenza: data, importo: r2(C.tra(40, 900)), stato: 'APERTA', metodo: 'Contanti', conto: '', note: '', incassi: [] });
     }
     // fatture dei fornitori (registro acquisti) e debiti
     S.acquisti = [];
-    S.fornitori.forEach((fo) => {
-      const quante = C.intero(1, 3);
+    let prot = 0;
+    const destinazioni = ['MERCE', 'MERCE', 'MERCE', 'MERCE', 'SPESE'];
+    S.fornitori.filter((f) => !f.nome.startsWith('DA COMPLETARE')).forEach((fo) => {
+      const quante = C.intero(2, 4);
       for (let k = 0; k < quante; k++) {
-        const data = piuGiorni(oggi, -C.intero(5, 110));
-        const tot = r2(C.tra(180, 3200));
-        const m = metodoPer(fo.pagamento);
-        const doc = { id: nuovoId(), tipo: 'FATTURA', fornitoreId: fo.id, numero: String(C.intero(100, 9999)) + '/' + data.slice(2, 4), data, totale: tot, stato: 'REGISTRATA' };
+        const data = piuGiorni(oggi, -C.intero(3, 110));
+        const arts = S.articoli.filter((a) => a.forn === fo.id);
+        const righe = C.mescola(arts).slice(0, C.intero(2, 6)).map((a) => ({ artId: a.id, codice: a.codice, descr: a.descr, qta: C.intero(2, 24), costo: a.costo, iva: a.iva }));
+        let imp = 0, iva = 0; righe.forEach((r) => { const t = r2(r.qta * r.costo); imp += t; iva += r2(t * r.iva / 100); });
+        const m = metodoPer(fo.cond);
+        const doc = {
+          id: nuovoId(), prot: 0, tipo: 'FATTURA_ACQUISTO', numero: C.intero(100, 9999) + '/' + data.slice(2, 4), data, fornitoreId: fo.id,
+          imponibile: r2(imp), iva: r2(iva), totale: r2(imp + iva), destinazione: C.scegli(destinazioni), regime: 'ORDINARIA',
+          pagamento: fo.cond || (m ? m.nome : ''), daControllare: C.prob(0.12), ordine: false, righe, allegati: C.prob(0.5) ? 1 : 0, ricevutaIl: piuGiorni(data, C.intero(0, 3)),
+        };
         S.acquisti.push(doc);
-        const scad = piuGiorni(data, m.giorni);
-        const s = { id: nuovoId(), tipo: 'PASSIVA', soggettoId: fo.id, acquistoId: doc.id, documento: doc.numero, dataDoc: data, scadenza: scad, importo: tot, pagato: 0, stato: 'APERTA', metodoId: m.id };
-        if (scad < oggi && C.prob(0.8)) { s.pagato = tot; s.stato = 'PAGATA'; s.incassoIl = scad; }
+        const scad = piuGiorni(data, m ? m.giorni : 30);
+        const s = { id: nuovoId(), tipo: 'PASSIVA', soggettoId: fo.id, acquistoId: doc.id, documento: doc.numero, dataDoc: data, scadenza: scad, importo: doc.totale, stato: 'APERTA', metodo: fo.cond || '', conto: fo.cond === 'RID' ? 'RID su Banca del Centro' : '', note: '', incassi: [] };
+        if (scad < oggi && C.prob(0.8)) s.incassi.push({ id: nuovoId(), data: scad, importo: doc.totale, conto: 'BANCA', tipo: 'PAGAMENTO', note: '', operatore: 'ANNA ROSSI' });
         S.scadenze.push(s);
       }
     });
+    S.acquisti.sort((a, b) => a.ricevutaIl.localeCompare(b.ricevutaIl)).forEach((d) => { d.prot = ++prot; });
+    // un paio di ordini (non sono fatture: nel registro si vedono solo con «anche gli ordini»)
+    S.fornitori.slice(0, 2).forEach((fo) => S.acquisti.push({ id: nuovoId(), prot: 0, tipo: 'ORDINE', numero: 'ORD ' + C.intero(10, 99), data: piuGiorni(oggi, -C.intero(1, 9)), fornitoreId: fo.id, imponibile: 0, iva: 0, totale: r2(C.tra(200, 900)), destinazione: 'MERCE', regime: 'ORDINARIA', pagamento: fo.cond, daControllare: false, ordine: true, righe: [], allegati: 0, ricevutaIl: oggi }));
+    S.numeri.protocollo = prot;
+    S.scadenze.forEach((s) => {
+      const pagato = r2(s.incassi.reduce((x, i) => x + i.importo, 0));
+      s.pagato = pagato;
+      s.stato = pagato >= s.importo - 0.005 ? 'PAGATA' : pagato > 0 ? 'PARZIALE' : 'APERTA';
+    });
+    S.acconti = [];
 
     // ---------- prima nota ----------
     S.primaNota = [];
-    const mov = (data, tipo, conto, importo, causale, descr, dest) => S.primaNota.push({ id: nuovoId(), data, tipo, conto, contoDest: dest || '', importo: r2(importo), causale, descr });
-    S.scadenze.filter((s) => s.pagato > 0 && s.incassoIl && s.incassoIl >= piuGiorni(oggi, -60) && s.incassoIl <= oggi).forEach((s) => {
-      const m = S.metodi.find((x) => x.id === s.metodoId);
-      const conto = s.tipo === 'PASSIVA' ? 'BANCA' : m && m.id === 1 ? 'CASSA' : m && m.id === 3 ? 'ASSEGNI' : 'BANCA';
+    const mov = (data, tipo, conto, importo, causale, descr, soggetto, rif, note) => S.primaNota.push({ id: nuovoId(), data, tipo, conto, importo: r2(importo), causale, descr, soggetto: soggetto || '', rif: rif || '', note: note || '', cassa: 0, fuori: 0 });
+    S.scadenze.forEach((s) => s.incassi.forEach((i) => {
+      if (i.data < piuGiorni(oggi, -60) || i.data > oggi) return;
       const sogg = s.tipo === 'ATTIVA' ? (cliPer[s.soggettoId] || {}).nome : (S.fornitori.find((f) => f.id === s.soggettoId) || {}).nome;
-      mov(s.incassoIl, s.tipo === 'ATTIVA' ? 'ENTRATA' : 'USCITA', conto, s.pagato, s.tipo === 'ATTIVA' ? 'INCASSO FT ' + s.documento : 'PAGAMENTO FT ' + s.documento, sogg || '');
-    });
-    // versamenti e accrediti solo nei giorni coperti dagli scontrini, cosi' cassa e POS tornano
+      mov(i.data, s.tipo === 'ATTIVA' ? 'ENTRATA' : 'USCITA', i.conto, i.importo, (s.tipo === 'ATTIVA' ? 'INCASSO' : 'PAGAMENTO') + (s.documento ? ' FT ' + s.documento : ''), sogg, sogg, 'scad:' + s.id);
+    }));
     for (let g = 8; g >= 2; g -= 3) {
       const d = piuGiorni(oggi, -g);
-      mov(d, 'GIROCONTO', 'CASSA', C.tra(700, 1100), 'VERSAMENTO', 'Versamento contanti in banca', 'BANCA');
-      mov(piuGiorni(d, 1), 'GIROCONTO', 'POS', C.tra(600, 950), 'ACCREDITO POS', 'Accredito incassi con carta', 'BANCA');
+      mov(d, 'GIROCONTO', 'CASSA', C.tra(700, 1100), 'VERSAMENTO', 'Versamento contanti in banca', '', '', '');
+      S.primaNota[S.primaNota.length - 1].contoDest = 'BANCA';
+      mov(piuGiorni(d, 1), 'GIROCONTO', 'POS', C.tra(600, 950), 'ACCREDITO POS', 'Accredito incassi con carta', '', '', '');
+      S.primaNota[S.primaNota.length - 1].contoDest = 'BANCA';
     }
     [['Spese postali e raccomandate', 12, 30], ['Carburante furgone', 40, 90], ['Cancelleria', 8, 25], ['Caffè e acqua per il negozio', 6, 18]].forEach((sp) => {
-      for (let k = 0; k < 2; k++) mov(piuGiorni(oggi, -C.intero(1, 9)), 'USCITA', 'CASSA', C.tra(sp[1], sp[2]), 'SPESE', sp[0]);
+      for (let k = 0; k < 2; k++) mov(piuGiorni(oggi, -C.intero(1, 9)), 'USCITA', 'CASSA', C.tra(sp[1], sp[2]), 'SPESE VARIE', sp[0]);
     });
-    [['Canone POS', 18, 30], ['Bolletta energia elettrica', 210, 380], ['Telefono e internet', 45, 70]].forEach((sp) => mov(piuGiorni(oggi, -C.intero(3, 50)), 'USCITA', 'BANCA', C.tra(sp[1], sp[2]), 'SPESE', sp[0]));
+    [['Canone POS', 18, 30], ['Bolletta energia elettrica', 210, 380], ['Telefono e internet', 45, 70]].forEach((sp) => mov(piuGiorni(oggi, -C.intero(3, 50)), 'USCITA', 'BANCA', C.tra(sp[1], sp[2]), 'SPESE VARIE', sp[0]));
     S.primaNota.sort((a, b) => b.data.localeCompare(a.data));
-    // saldi di partenza scelti perche' oggi i conti tornino su valori credibili per un negozio
-    // (stesso calcolo del saldo che fa l'app: prima nota + incassi del banco)
+    S.quadrature = [];
+    // saldi di partenza scelti perché oggi i conti tornino su valori credibili per un negozio
     const flusso = (codice) => {
       let s = 0;
       S.primaNota.forEach((m) => {
@@ -667,7 +731,7 @@
       if (codice === 'POS') S.scontrini.forEach((x) => { if (x.metodoId === 2) s += x.totale; });
       return s;
     };
-    const obiettivo = { CASSA: 1850, BANCA: 38400, POS: 640, ASSEGNI: 1250 };
+    const obiettivo = { CASSA: 1850, BANCA: 38400, POS: 640, ASSEGNI: 1250, BANCA2: 12650 };
     S.conti.forEach((c) => { c.iniziale = r2(obiettivo[c.codice] - flusso(c.codice)); });
 
     // ---------- registro agrofarmaci ----------
@@ -675,31 +739,50 @@
     const fito = artDiCat('FITO');
     const agro = S.fornitori.find((f) => f.cat.includes('FITO'));
     fito.forEach((a) => {
-      const quanti = C.intero(1, 3);
-      for (let k = 0; k < quanti; k++) {
+      for (let k = 0; k < C.intero(1, 3); k++) {
         const data = piuGiorni(oggi, -C.intero(10, 170));
-        S.registro.push({ id: nuovoId(), tipo: 'CARICO', data, artId: a.id, qta: C.intero(6, 30), fornitoreId: agro.id, doc: 'DDT forn. ' + C.intero(1200, 4800), dataDoc: data, lotto: a.lotto });
+        S.registro.push({ id: nuovoId(), tipo: 'CARICO', data, artId: a.id, qta: C.intero(6, 30), fornitoreId: agro.id, nReg: a.nReg, produttore: a.produttore, doc: 'DDT forn. ' + C.intero(1200, 4800), dataDoc: piuGiorni(data, -C.intero(0, 2)), lotto: a.lotto });
       }
     });
-    const validi = (data) => S.patentini.filter((p) => p.scadenza >= data && p.rilascio <= data);
+    const validi = (data) => S.patentini.filter((p) => p.validoA >= data && p.validoDa <= data);
+    const ddtFito = S.ddt.filter((d) => d.righe.some((r) => (S.articoli.find((a) => a.id === r.artId) || {}).fito));
     for (let k = 0; k < 70; k++) {
       const data = piuGiorni(oggi, -C.intero(0, 95));
       const v = validi(data);
       if (!v.length) continue;
       const p = C.scegli(v);
       const a = C.scegli(fito);
-      S.registro.push({ id: nuovoId(), tipo: 'SCARICO', data, artId: a.id, qta: C.intero(1, 5), patentinoId: p.id, clienteId: p.clienteId, doc: 'DDT ' + C.intero(1, Math.max(2, nDdt)), dataDoc: data, lotto: a.lotto });
+      const dd = C.scegli(ddtFito.length ? ddtFito : S.ddt);
+      S.registro.push({ id: nuovoId(), tipo: 'SCARICO', data, artId: a.id, qta: C.intero(1, 5), patentinoId: p.id, clienteId: p.clienteId, doc: String(dd.numero), ddtId: dd.id, dataDoc: data, lotto: a.lotto, nma: '' });
     }
     S.registro.sort((a, b) => b.data.localeCompare(a.data));
+    let nma = 4800 + C.intero(0, 120);
+    S.registro.filter((r) => r.tipo === 'SCARICO').slice().reverse().forEach((r) => { r.nma = String(++nma); });
+    S.numeri.nma = nma;
 
-    // ---------- cronologia ----------
+    // ---------- cronologia (registro delle operazioni) ----------
     S.cronologia = [];
-    const voce = (quando, tipo, descr) => S.cronologia.push({ id: nuovoId(), quando, tipo, descr });
-    S.scontrini.slice(-12).forEach((s) => voce(s.data, 'Vendita', 'Emesso scontrino n. ' + s.numero + ' · € ' + s.totale.toFixed(2).replace('.', ',')));
-    S.fatture.slice(-8).forEach((f) => voce(f.data + 'T18:' + pad(C.intero(10, 50)) + ':00', 'Fattura', 'Emessa ' + (f.tipo === 'FAC' ? 'fattura accompagnatoria FAC ' : 'fattura n. ') + f.numero + ' a ' + cliPer[f.clienteId].nome));
-    C.mescola(S.articoli).slice(0, 5).forEach((a) => voce(piuGiorni(oggi, -C.intero(0, 6)) + 'T' + pad(C.intero(8, 18)) + ':' + pad(C.intero(0, 59)) + ':00', 'Articoli', 'Modificato il prezzo di ' + a.codice + ' · ' + a.descr));
+    const voce = (quando, tipo, descr, rif) => S.cronologia.push({ id: nuovoId(), quando, tipo, descr, rif: rif || '' });
+    S.scontrini.slice(-25).forEach((s) => voce(s.data, 'Vendita', 'Emesso scontrino n. ' + s.numero + ' · € ' + s.totale.toFixed(2).replace('.', ',') + ' · PC ' + s.postazione, 'sc:' + s.id));
+    const euro = (n) => n.toFixed(2).replace('.', ',');
+    S.fatture.slice(-10).forEach((f) => voce(f.data + 'T18:' + pad(C.intero(10, 50)) + ':00', f.tipo === 'NC' ? 'NotaCredito' : 'Fattura',
+      f.tipo === 'NC' ? 'Emessa nota di credito n. ' + f.numero + ' su fattura n. ' + ((S.fatture.find((x) => x.id === f.origineId) || {}).numero || '') + ' (' + f.note + ') · € ' + euro(f.totale)
+        : f.tipo === 'FAC' ? 'Emessa fattura accompagnatoria n. FAC ' + f.numero + ' a ' + cliPer[f.clienteId].nome + ' · € ' + euro(f.totale)
+          : 'Emessa fattura differita n. ' + f.numero + ' (' + f.ddtIds.length + ' DDT) a ' + cliPer[f.clienteId].nome + ' · € ' + euro(f.totale), 'doc:' + f.id));
+    S.ddt.slice(-8).forEach((d) => voce(d.data + 'T' + pad(C.intero(8, 12)) + ':' + pad(C.intero(0, 59)) + ':00', 'DDT', 'Emesso DDT n. ' + d.numero + ' · € ' + euro(d.totale), 'doc:' + d.id));
+    C.mescola(S.articoli).slice(0, 6).forEach((a) => voce(piuGiorni(oggi, -C.intero(0, 6)) + 'T' + pad(C.intero(8, 18)) + ':' + pad(C.intero(0, 59)) + ':00', 'Prezzo', 'Modificato prezzo articolo id ' + a.id + ' → € ' + euro(a.prezzoA), 'art:' + a.id));
+    for (let g = 6; g >= 0; g--) {
+      const d = piuGiorni(oggi, -g);
+      if (daIso(d).getDay() === 0) continue;
+      voce(d + 'T08:2' + C.intero(0, 9) + ':00', 'Accesso', 'Accesso di ' + C.scegli(nomiOp) + ' su CASSA-PC');
+    }
     S.cronologia.sort((a, b) => b.quando.localeCompare(a.quando));
 
+    // ---------- cestino, posta PEC, inventario ----------
+    S.cestino = [];
+    S.pecPosta = [];
+    S.inventario = {};
+    S.periodi = [];
     return S;
   }
 
@@ -741,5 +824,5 @@
     return { anni, mesi, perCat, pesi };
   }
 
-  window.GF_DATI = { genera, storico, iso, daIso, piuGiorni, fineMese, r2, pad };
+  window.GF_DATI = { genera, storico, iso, daIso, piuGiorni, fineMese, r2, pad, controlloPiva, codiceFiscale };
 })();
